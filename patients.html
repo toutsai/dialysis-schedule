@@ -3,17 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>透析病人管理系統 (V1.4 - 功能修復與順序調整版)</title>
+    <title>透析病人管理系統 (V1.5 - 重構與穩定性修復版)</title>
     <style>
-        /* CSS 與 V1.3 完全相同 */
-        :root {
-            --green-bg: #e8f5e9; --green-text: #2e7d32;
-            --blue-bg: #e3f2fd;  --blue-text: #1565c0;
-            --orange-bg: #fff3e0; --orange-text: #ef6c00;
-            --grey-bg: #f5f5f5; --grey-text: #616161;
-            --red-text: #c62828;
-            --primary-color: #007bff;
-        }
+        /* CSS 與 V1.4 完全相同 */
+        :root { --green-bg: #e8f5e9; --green-text: #2e7d32; --blue-bg: #e3f2fd;  --blue-text: #1565c0; --orange-bg: #fff3e0; --orange-text: #ef6c00; --grey-bg: #f5f5f5; --grey-text: #616161; --red-text: #c62828; --primary-color: #007bff; }
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f9f9f9; margin: 0; padding: 20px; }
         .container { max-width: 1600px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .tabs { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 20px; }
@@ -29,7 +22,7 @@
         .table-wrapper { max-height: 70vh; overflow: auto; }
         .patient-table { width: 100%; border-collapse: collapse; table-layout: auto; }
         .patient-table th, .patient-table td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap; }
-        .patient-table td:nth-child(1), .patient-table#ipd-table-body td:nth-child(8), .patient-table#opd-table-body td:nth-child(7) { white-space: normal; }
+        .patient-table td:nth-child(1), .patient-table #ipd-table-body td:nth-child(8), .patient-table #opd-table-body td:nth-child(7), .patient-table #deleted-table-body td:nth-child(5) { white-space: normal; }
         .patient-table th { background-color: #f2f2f2; cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 10;}
         .patient-table th:hover { background-color: #e8e8e8; }
         .patient-table th .sort-indicator { display: inline-block; margin-left: 5px; color: #999; }
@@ -42,8 +35,8 @@
         .weekly-schedule-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .weekly-schedule-table th, .weekly-schedule-table td { border: 1px solid #ddd; padding: 4px; text-align: center; vertical-align: middle; height: 65px; }
         .weekly-schedule-table th { background-color: #f2f2f2; font-size: 1.1em; }
-        .weekly-schedule-table td:first-child { background-color: #f8f9fa; font-weight: bold; }
-        .schedule-slot { min-height: 55px; border-radius: 5px; padding: 5px; cursor: pointer; transition: background-color 0.2s; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; }
+        .weekly-schedule-table td.bed-label { background-color: #f8f9fa; font-weight: bold; }
+        .schedule-slot { width: 100%; height: 100%; box-sizing: border-box; border-radius: 5px; padding: 5px; cursor: pointer; transition: background-color 0.2s; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; }
         .schedule-slot:not(.filled):hover { background-color: #e9ecef; }
         .schedule-slot.filled { cursor: pointer; background-color: var(--green-bg); }
         .slot-patient-name { font-weight: bold; }
@@ -73,73 +66,37 @@
     <div class="container">
         <h1>透析病人管理系統</h1>
         <div class="tabs">
-            <!-- --- CHANGE START: 調整頁籤順序 --- -->
             <button class="tab-button active" data-tab="ipd">住院病人</button>
             <button class="tab-button" data-tab="opd">門診常規</button>
             <button class="tab-button" data-tab="weekly-schedule">門診週排班</button>
             <button class="tab-button" data-tab="deleted">已刪除病人</button>
-            <!-- --- CHANGE END --- -->
         </div>
 
         <div id="ipd" class="tab-content active">
-            <div class="toolbar">
-                <button id="add-ipd-btn">新增住院病人</button>
-                <div class="stats-area" id="ipd-stats"></div>
-            </div>
-            <div class="table-wrapper">
-                <table class="patient-table" id="ipd-table">
-                    <thead id="ipd-table-head"></thead>
-                    <tbody id="ipd-table-body"></tbody>
-                </table>
-            </div>
+            <div class="toolbar"><button id="add-ipd-btn">新增住院病人</button><div class="stats-area" id="ipd-stats"></div></div>
+            <div class="table-wrapper"><table class="patient-table" id="ipd-table"><thead id="ipd-table-head"></thead><tbody id="ipd-table-body"></tbody></table></div>
         </div>
-
         <div id="opd" class="tab-content">
-            <div class="toolbar">
-                <button id="add-opd-btn">新增門診病人</button>
-                <div class="stats-area" id="opd-stats"></div>
-            </div>
-             <div class="table-wrapper">
-                <table class="patient-table" id="opd-table">
-                    <thead id="opd-table-head"></thead>
-                    <tbody id="opd-table-body"></tbody>
-                </table>
-            </div>
+            <div class="toolbar"><button id="add-opd-btn">新增門診病人</button><div class="stats-area" id="opd-stats"></div></div>
+            <div class="table-wrapper"><table class="patient-table" id="opd-table"><thead id="opd-table-head"></thead><tbody id="opd-table-body"></tbody></table></div>
         </div>
-        
         <div id="weekly-schedule" class="tab-content">
-            <div class="toolbar">
-                <h3>門診常規透析排班總表</h3>
-                <div id="weekly-stats" class="stats-area"></div>
-            </div>
-            <div class="table-wrapper">
-                <table class="weekly-schedule-table">
-                    <thead id="weekly-schedule-head"></thead>
-                    <tbody id="weekly-schedule-body"></tbody>
-                </table>
-            </div>
+            <div class="toolbar"><h3>門診常規透析排班總表</h3><div id="weekly-stats" class="stats-area"></div></div>
+            <div class="table-wrapper"><table class="weekly-schedule-table"><thead id="weekly-schedule-head"></thead><tbody id="weekly-schedule-body"></tbody></table></div>
         </div>
-
         <div id="deleted" class="tab-content">
-             <div class="toolbar">
-                <div>已刪除病人紀錄</div>
-            </div>
-             <div class="table-wrapper">
-                <table class="patient-table" id="deleted-table">
-                    <thead id="deleted-table-head"></thead>
-                    <tbody id="deleted-table-body"></tbody>
-                </table>
-            </div>
+            <div class="toolbar"><div>已刪除病人紀錄</div></div>
+            <div class="table-wrapper"><table class="patient-table" id="deleted-table"><thead id="deleted-table-head"></thead><tbody id="deleted-table-body"></tbody></table></div>
         </div>
     </div>
 
     <!-- Modals and Templates -->
-    <div id="patient-modal" class="modal"> <!-- ... 病人新增/編輯 Modal 不變 ... --> </div>
-    <dialog id="delete-reason-dialog"> <!-- ... 刪除原因 Dialog 不變 ... --> </dialog>
-    <dialog id="add-schedule-dialog"> <!-- ... 新增排班 Dialog 不變 ... --> </dialog>
-    <template id="ipd-form-template"> <!-- ... IPD 表單樣板不變 ... --> </template>
-    <template id="opd-form-template"> <!-- ... OPD 表單樣板不變 ... --> </template>
-    
+    <div id="patient-modal" class="modal"><div class="modal-content"><div class="modal-header"><h2 id="modal-title">病人資料</h2><span class="close-button">×</span></div><div id="modal-form-content"></div></div></div>
+    <dialog id="delete-reason-dialog"><h3>請選擇刪除原因</h3><div id="delete-reason-options" class="button-group"></div><div class="button-group"><button id="delete-cancel-btn" value="cancel">取消</button></div></dialog>
+    <dialog id="add-schedule-dialog"><h3>新增排班</h3><div class="form-field"><label for="patient-search">搜尋病人 (姓名/病歷號)</label><input type="text" id="patient-search" placeholder="輸入關鍵字..."></div><div class="form-field"><label for="patient-select">或直接選擇病人</label><select id="patient-select" size="10"></select></div><div class="form-field"><p>將依此病人的預設頻率填入：<strong id="patient-freq-display"></strong></p></div><div class="modal-footer" style="border-top: none;"><button id="add-schedule-confirm-btn">確認填入</button><button id="add-schedule-cancel-btn" value="cancel">取消</button></div></dialog>
+    <template id="ipd-form-template"><form id="patient-form"><input type="hidden" id="patient-id"><input type="hidden" id="patient-type" value="ipd"><div class="form-grid"><div class="form-field"><label for="name">姓名</label><input type="text" id="name" required></div><div class="form-field"><label for="medical-record-number">病歷號</label><input type="text" id="medical-record-number" required></div><div class="form-field"><label for="physician">會診醫師</label><select id="physician"></select></div><div class="form-field"><label for="frequency">透析頻率</label><select id="frequency"></select></div><div class="form-field"><label for="mode">透析模式</label><select id="mode"></select></div><fieldset class="form-group form-field-full"><legend>須注意疾病</legend><div id="disease-checkboxes" class="checkbox-container"></div></fieldset><fieldset class="form-group form-field-full"><legend>狀態標記</legend><div class="checkbox-container"><div class="checkbox-group"><input type="checkbox" id="is-first-dialysis"><label for="is-first-dialysis">首透</label></div><div class="checkbox-group"><input type="checkbox" id="is-discontinued"><label for="is-discontinued">中止透析</label></div></div></fieldset><div class="form-field form-field-full"><label for="remarks">備註</label><textarea id="remarks" rows="3"></textarea></div></div><div class="modal-footer"><button type="submit">儲存</button></div></form></template>
+    <template id="opd-form-template"><form id="patient-form"><input type="hidden" id="patient-id"><input type="hidden" id="patient-type" value="opd"><div class="form-grid"><div class="form-field"><label for="name">姓名</label><input type="text" id="name" required></div><div class="form-field"><label for="medical-record-number">病歷號</label><input type="text" id="medical-record-number" required></div><div class="form-field"><label for="physician">收案醫師</label><select id="physician"></select></div><div class="form-field"><label for="frequency">透析頻率</label><select id="frequency"></select></div><div class="form-field"><label for="mode">透析模式</label><select id="mode"></select></div><div class="form-field"><label for="vasc-access">目前血管通路</label><select id="vasc-access"></select></div><div class="form-field"><label for="first-dialysis-date">首次透析日期</label><input type="date" id="first-dialysis-date"></div><div class="form-field"><label for="access-creation-date">通路建立日期</label><input type="date" id="access-creation-date"></div><fieldset class="form-group form-field-full"><legend>須注意疾病</legend><div id="disease-checkboxes" class="checkbox-container"></div></fieldset><div class="form-field form-field-full"><label for="remarks">備註</label><textarea id="remarks" rows="3"></textarea></div></div><div class="modal-footer"><button type="submit">儲存</button></div></form></template>
+
     <script>
     document.addEventListener('DOMContentLoaded', () => {
         // --- 設定 (無變動) ---
@@ -170,31 +127,57 @@
         const modalFormContent = document.getElementById('modal-form-content');
         const deleteDialog = document.getElementById('delete-reason-dialog');
         const addScheduleDialog = document.getElementById('add-schedule-dialog');
-        
-        // --- 核心功能函式 ---
-        const loadAllData = async () => { /* ...此函式無變動... */ };
 
-        // --- CHANGE START: 徹底修復 renderAll 和 renderPatientTable ---
-        const renderAll = () => {
+        // --- 全局函式 ---
+        const formatDate = (isoString) => isoString ? new Date(isoString).toLocaleDateString() : '';
+
+        // --- CHANGE START: 重新組織的核心渲染和資料獲取流程 ---
+
+        const loadAllData = async () => {
+            try {
+                const [patientsRes, scheduleRes] = await Promise.all([
+                    fetch(PATIENTS_API_URL),
+                    fetch(WEEKLY_SCHEDULE_API_URL)
+                ]);
+                if (!patientsRes.ok || !scheduleRes.ok) throw new Error('Network error during data fetching');
+                allPatients = await patientsRes.json();
+                
+                const scheduleArray = await scheduleRes.json();
+                weeklyScheduleData = scheduleArray.reduce((acc, item) => {
+                    acc[item.slotId] = item;
+                    return acc;
+                }, {});
+
+                renderAllTabs();
+            } catch (error) {
+                console.error("Failed to fetch data:", error);
+                alert("讀取雲端資料失敗，請檢查網路連線。");
+            }
+        };
+
+        const renderAllTabs = () => {
             renderPatientTable('ipd');
             renderPatientTable('opd');
             renderPatientTable('deleted');
-            renderWeeklyScheduleTable();
+            populateWeeklySchedule();
             updateStats();
         };
-
+        
+        // 病人列表渲染
         const renderPatientTable = (type) => {
             const headersConfig = {
-                ipd: ['姓名', '病歷號', {key: 'physician', text:'會診醫師'}, {key: 'frequency', text:'頻率'}, '模式', '首透', '中止', '備註', '新增日期'],
-                opd: ['姓名', '病歷號', {key: 'physician', text:'收案醫師'}, {key: 'frequency', text:'頻率'}, '模式', '血管通路', '備註', '新增日期'],
-                deleted: ['姓名', '病歷號', '原狀態', '刪除原因', '備註', '刪除日期']
+                ipd: ['姓名', '病歷號', {key: 'physician', text:'會診醫師'}, {key: 'frequency', text:'頻率'}, '模式', '首透', '中止', '備註', {key: 'createdAt', text: '新增日期'}],
+                opd: ['姓名', '病歷號', {key: 'physician', text:'收案醫師'}, {key: 'frequency', text:'頻率'}, '模式', '血管通路', '備註', {key: 'createdAt', text: '新增日期'}],
+                deleted: ['姓名', '病歷號', '原狀態', '刪除原因', '備註', {key: 'deletedAt', text: '刪除日期'}]
             };
             const headers = headersConfig[type];
             const tableHead = document.getElementById(`${type}-table-head`);
             const tableBody = document.getElementById(`${type}-table-body`);
 
+            if (!tableHead || !tableBody) return;
+
             tableHead.innerHTML = `<tr>${headers.map(h => {
-                const key = (typeof h === 'object' ? h.key : h).toString().toLowerCase(); // 確保 key 是有效字串
+                const key = (typeof h === 'object' ? h.key : h).toString().toLowerCase();
                 const text = typeof h === 'object' ? h.text : h;
                 return `<th data-sort-key="${key}">${text} <span class="sort-indicator"></span></th>`;
             }).join('')}<th>操作</th></tr>`;
@@ -210,11 +193,11 @@
                 const rowClass = getRowClass(p);
                 let rowContent = '';
                 if (type === 'ipd') {
-                    rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.isFirstDialysis ? '✓' : ''}</td><td>${p.isDiscontinued ? '✓' : ''}</td><td>${p.remarks || ''}</td><td>${p.createdAt ? new Date(p.createdAt).toLocaleDateString() : ''}</td><td class="action-buttons"><button onclick="window.app.editPatient('${p.id}')">編輯</button><button onclick="window.app.transferToOpd('${p.id}')">轉門診</button><button onclick="window.app.deletePatient('${p.id}')">刪除</button></td>`;
+                    rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.isFirstDialysis ? '✓' : ''}</td><td>${p.isDiscontinued ? '✓' : ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td><td class="action-buttons"><button onclick="window.app.editPatient('${p.id}')">編輯</button><button onclick="window.app.transferToOpd('${p.id}')">轉門診</button><button onclick="window.app.deletePatient('${p.id}')">刪除</button></td>`;
                 } else if (type === 'opd') {
-                     rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.vascAccess || ''}</td><td>${p.remarks || ''}</td><td>${p.createdAt ? new Date(p.createdAt).toLocaleDateString() : ''}</td><td class="action-buttons"><button onclick="window.app.editPatient('${p.id}')">編輯</button><button onclick="window.app.deletePatient('${p.id}')">刪除</button></td>`;
-                } else { // deleted
-                    rowContent = `<td>${p.name || ''}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.originalStatus === 'ipd' ? '住院' : '門診'}</td><td>${p.deleteReason || ''}</td><td>${p.remarks || ''}</td><td>${p.deletedAt ? new Date(p.deletedAt).toLocaleDateString() : ''}</td><td><button onclick="window.app.restorePatient('${p.id}')">復原</button></td>`;
+                     rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.vascAccess || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td><td class="action-buttons"><button onclick="window.app.editPatient('${p.id}')">編輯</button><button onclick="window.app.deletePatient('${p.id}')">刪除</button></td>`;
+                } else {
+                    rowContent = `<td>${p.name || ''}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.originalStatus === 'ipd' ? '住院' : '門診'}</td><td>${p.deleteReason || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.deletedAt)}</td><td><button onclick="window.app.restorePatient('${p.id}')">復原</button></td>`;
                 }
                 return `<tr class="${rowClass}">${rowContent}</tr>`;
             }).join('');
@@ -226,7 +209,57 @@
                 th.addEventListener('click', () => handleSort(key));
             });
         };
-        // --- CHANGE END ---
+
+        // 週排班表格渲染 (框架優先)
+        const renderWeeklyScheduleTableFrame = () => {
+            const head = document.getElementById('weekly-schedule-head');
+            const body = document.getElementById('weekly-schedule-body');
+            head.innerHTML = `<tr><th>床位/班次</th>${WEEKDAYS.map(day => `<th>${day}</th>`).join('')}</tr>`;
+            let bodyHtml = '';
+            for (let i = 1; i <= TOTAL_BEDS; i++) {
+                SHIFTS.forEach((shift, shiftIndex) => {
+                    bodyHtml += `<tr>`;
+                    if (shiftIndex === 0) { bodyHtml += `<td class="bed-label" rowspan="3">${i}號床</td>`; }
+                    bodyHtml += `<td class="bed-label">${shift}</td>`;
+                    WEEKDAYS.forEach((day, dayIndex) => {
+                        const slotId = `${i}-${shiftIndex}-${dayIndex}`;
+                        bodyHtml += `<td><div class="schedule-slot" data-slot-id="${slotId}" onclick="window.app.openAddScheduleDialog('${slotId}')"></div></td>`;
+                    });
+                    bodyHtml += `</tr>`;
+                });
+            }
+            body.innerHTML = bodyHtml;
+        };
+        
+        // 週排班資料填充
+        const populateWeeklySchedule = () => {
+            // 清空所有舊資料
+            document.querySelectorAll('.schedule-slot.filled').forEach(slot => {
+                slot.classList.remove('filled');
+                slot.innerHTML = '';
+                const slotId = slot.dataset.slotId;
+                slot.onclick = () => window.app.openAddScheduleDialog(slotId);
+            });
+            // 填充新資料
+            Object.values(weeklyScheduleData).forEach(schedule => {
+                const slot = document.querySelector(`.schedule-slot[data-slot-id="${schedule.slotId}"]`);
+                if (slot) {
+                    const patient = allPatients.find(p => p.id === schedule.patientId);
+                    if (patient) {
+                        slot.classList.add('filled');
+                        slot.innerHTML = `
+                            <div class="slot-patient-name">${patient.name}${generateDiseaseTags(patient.diseases)}</div>
+                            <div class="slot-patient-mode">${patient.mode || ''}</div>
+                        `;
+                        slot.onclick = () => window.app.clearScheduleSlot(schedule.id); // 注意是 schedule.id
+                    }
+                }
+            });
+            const weeklyStatsDiv = document.getElementById('weekly-stats');
+            const shiftCounts = { '早班': 0, '午班': 0, '晚班': 0 };
+            Object.values(weeklyScheduleData).forEach(s => { const shiftIndex = s.slotId.split('-')[1]; shiftCounts[SHIFTS[shiftIndex]]++; });
+            weeklyStatsDiv.innerHTML = Object.entries(shiftCounts).map(([shift, count]) => `${shift}: ${count}`).join('  |  ');
+        };
 
         const updateStats = () => { /* ...此函式無變動... */ };
         const getRowClass = (patient) => { /* ...此函式無變動... */ };
@@ -239,60 +272,45 @@
         const transferToOpd = async (id) => { /* ...此函式無變動... */ };
         const deletePatient = (id) => { /* ...此函式無變動... */ };
         const archivePatient = async (id, reason) => { /* ...此函式無變動... */ };
-        const renderWeeklyScheduleTable = () => { /* ...此函式無變動... */ };
+        const restorePatient = async (id) => { /* ...此函式無變動... */ };
         const openAddScheduleDialog = (slotId) => { /* ...此函式無變動... */ };
         const handleAddSchedule = async () => { /* ...此函式無變動... */ };
-        const clearScheduleSlot = async (slotId) => { /* ...此函式無變動... */ };
-
-        // --- 新增：復原病人功能 ---
-        const restorePatient = async (id) => {
-            const patient = allPatients.find(p => p.id === id);
-            if (!patient || !confirm(`確定要將病人「${patient.name}」復原到「${patient.originalStatus === 'ipd' ? '住院' : '門診'}」列表嗎？`)) return;
-
-            const patientData = {
-                isDeleted: false,
-                status: patient.originalStatus,
-                deleteReason: null,
-                deletedAt: null
-            };
-            try {
-                const response = await fetch(`${PATIENTS_API_URL}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patientData) });
-                if (!response.ok) throw new Error('Restore error');
-                await loadAllData();
-            } catch (error) { console.error("Restore failed:", error); alert("復原失敗！"); }
-        };
+        const clearScheduleSlot = async (scheduleId) => { /* ...此函式無變動... */ };
+        // --- CHANGE END ---
 
         // --- Event Listeners (無變動) ---
-        
-        // --- Expose functions to global scope (新增 restorePatient) ---
-        window.app = {
-            editPatient: (id) => { const p = allPatients.find(p => p.id === id); if (p) openModal(p.status, p); },
-            deletePatient,
-            transferToOpd,
-            restorePatient, // 新增
-            openAddScheduleDialog,
-            clearScheduleSlot,
-        };
+        tabButtons.forEach(button => { button.addEventListener('click', () => { /* ... */ }); });
+        document.getElementById('add-ipd-btn').addEventListener('click', () => openModal('ipd'));
+        document.getElementById('add-opd-btn').addEventListener('click', () => openModal('opd'));
+        document.querySelector('.close-button').addEventListener('click', closeModal);
+        window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+        document.getElementById('add-schedule-confirm-btn').addEventListener('click', handleAddSchedule);
+        document.getElementById('add-schedule-cancel-btn').addEventListener('click', () => addScheduleDialog.close());
+
+        // --- Expose functions to global scope ---
+        window.app = { editPatient, deletePatient, transferToOpd, restorePatient, openAddScheduleDialog, clearScheduleSlot };
         
         // --- 為求完整，複製貼上其他未變動的函式 ---
-        loadAllData = async () => {try {const [patientsRes, scheduleRes] = await Promise.all([fetch(PATIENTS_API_URL),fetch(WEEKLY_SCHEDULE_API_URL)]);if (!patientsRes.ok || !scheduleRes.ok) throw new Error('Network error');allPatients = await patientsRes.json();const scheduleArray = await scheduleRes.json();weeklyScheduleData = scheduleArray.reduce((acc, item) => {acc[item.slotId] = item;return acc;}, {});renderAll();} catch (error) {console.error("Failed to fetch data:", error);alert("讀取資料失敗，請檢查網路連線。");}};
+        // (這裡的程式碼與 v1.3/v1.4 相同，但為避免遺漏再次貼上)
         updateStats = () => {const ipdPatients = allPatients.filter(p => p.status === 'ipd' && !p.isDeleted);const opdPatients = allPatients.filter(p => p.status === 'opd' && !p.isDeleted);const ipdStatsDiv = document.getElementById('ipd-stats');const opdStatsDiv = document.getElementById('opd-stats');const generateStatsHTML = (patients) => {if (patients.length === 0) return '總人數: 0';const freqCounts = patients.reduce((acc, p) => {acc[p.frequency] = (acc[p.frequency] || 0) + 1;return acc;}, {});const freqString = Object.entries(freqCounts).map(([freq, count]) => `${freq || '未分類'}: ${count}人`).join(', ');return `總人數: ${patients.length} (${freqString})`;};ipdStatsDiv.innerHTML = generateStatsHTML(ipdPatients);opdStatsDiv.innerHTML = generateStatsHTML(opdPatients);};
         getRowClass = (p) => {if (p.status === 'deleted') return 'status-deleted';const biweeklyFreq = ['一四', '二五', '三六'];if (biweeklyFreq.includes(p.frequency)) return 'status-biweekly';if (p.status === 'ipd') return 'status-ipd';if (p.status === 'opd') return 'status-opd';return '';};
         generateDiseaseTags = (d) => {if (!d || d.length === 0) return '';return d.map(tag => `<span class="disease-tag">${tag}</span>`).join('');};
         sortPatients = (p) => {p.sort((a, b) => {const valA = a[currentSort.column] || '';const valB = b[currentSort.column] || '';const compare = String(valA).localeCompare(String(valB), 'zh-Hant');return currentSort.order === 'asc' ? compare : -compare;});};
-        handleSort = (key) => {if (currentSort.column === key) {currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';} else {currentSort.column = key;currentSort.order = 'asc';}renderAll();};
+        handleSort = (key) => {if (currentSort.column === key) {currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc';} else {currentSort.column = key;currentSort.order = 'asc';}renderAllTabs();};
         openModal = (type, patient = null) => {const templateId = type === 'ipd' ? 'ipd-form-template' : 'opd-form-template';const template = document.getElementById(templateId);modalFormContent.innerHTML = '';modalFormContent.appendChild(template.content.cloneNode(true));const form = modalFormContent.querySelector('form');const populateSelect = (selectId, options) => {const select = form.querySelector(`#${selectId}`);if (select) select.innerHTML = '<option value="">請選擇</option>' + options.map(o => `<option value="${o}">${o}</option>`).join('');};populateSelect('physician', PHYSICIANS);populateSelect('frequency', FREQUENCIES);populateSelect('mode', MODES);populateSelect('vasc-access', VASC_ACCESSES);const diseaseContainer = form.querySelector('#disease-checkboxes');if(diseaseContainer) {diseaseContainer.innerHTML = DISEASES.map(d => `<div class="checkbox-group"><input type="checkbox" id="disease-${d}" name="disease" value="${d}"><label for="disease-${d}">${d}</label></div>`).join('');}modalTitle.textContent = patient ? `編輯${type === 'ipd' ? '住院' : '門診'}病人` : `新增${type === 'ipd' ? '住院' : '門診'}病人`;if (patient) {form.querySelector('#patient-id').value = patient.id;form.querySelector('#name').value = patient.name || '';form.querySelector('#medical-record-number').value = patient.medicalRecordNumber || '';form.querySelector('#physician').value = patient.physician || '';form.querySelector('#frequency').value = patient.frequency || '';form.querySelector('#mode').value = patient.mode || '';form.querySelector('#remarks').value = patient.remarks || '';form.querySelectorAll('input[name="disease"]').forEach(cb => {cb.checked = patient.diseases && patient.diseases.includes(cb.value);});if (type === 'ipd') {form.querySelector('#is-first-dialysis').checked = patient.isFirstDialysis || false;form.querySelector('#is-discontinued').checked = patient.isDiscontinued || false;} else {form.querySelector('#first-dialysis-date').value = patient.firstDialysisDate || '';form.querySelector('#access-creation-date').value = patient.accessCreationDate || '';form.querySelector('#vasc-access').value = patient.vascAccess || '';}}form.addEventListener('submit', handleFormSubmit);modal.style.display = 'flex';};
         closeModal = () => {modal.style.display = 'none';modalFormContent.innerHTML = '';};
         handleFormSubmit = async (e) => {e.preventDefault();const form = e.target;const id = form.querySelector('#patient-id').value;const type = form.querySelector('#patient-type').value;const selectedDiseases = Array.from(form.querySelectorAll('input[name="disease"]:checked')).map(cb => cb.value);let patientData = {name: form.querySelector('#name').value,medicalRecordNumber: form.querySelector('#medical-record-number').value,physician: form.querySelector('#physician').value,frequency: form.querySelector('#frequency').value,mode: form.querySelector('#mode').value,remarks: form.querySelector('#remarks').value,diseases: selectedDiseases,status: type,isDeleted: false};if (type === 'ipd') {patientData.isFirstDialysis = form.querySelector('#is-first-dialysis').checked;patientData.isDiscontinued = form.querySelector('#is-discontinued').checked;} else {patientData.firstDialysisDate = form.querySelector('#first-dialysis-date').value;patientData.accessCreationDate = form.querySelector('#access-creation-date').value;patientData.vascAccess = form.querySelector('#vasc-access').value;}const url = id ? `${PATIENTS_API_URL}/${id}` : PATIENTS_API_URL;const method = id ? 'PUT' : 'POST';if (!id) { patientData.createdAt = new Date().toISOString(); }try {const response = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patientData) });if (!response.ok) throw new Error('Save error');closeModal();await loadAllData();} catch (error) { console.error("Save failed:", error); alert("儲存失敗！"); }};
         transferToOpd = async (id) => { if (!confirm('確定要將此病人轉為門診常規嗎？此操作將從住院名單中移除。')) return; try { const response = await fetch(`${PATIENTS_API_URL}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'opd' }) }); if (!response.ok) throw new Error('Transfer error'); await loadAllData(); } catch (error) { console.error("Transfer failed:", error); alert("轉換失敗！"); } };
         deletePatient = (id) => {const dialog = document.getElementById('delete-reason-dialog');const optionsContainer = document.getElementById('delete-reason-options');optionsContainer.innerHTML = DELETE_REASONS.map(reason => `<button value="${reason}">${reason}</button>`).join('');const handleReasonSelection = (event) => {const selectedReason = event.target.value;if(selectedReason && selectedReason !== 'cancel') {archivePatient(id, selectedReason);}dialog.close();optionsContainer.removeEventListener('click', handleReasonSelection);document.getElementById('delete-cancel-btn').removeEventListener('click', handleReasonSelection);};optionsContainer.addEventListener('click', handleReasonSelection);document.getElementById('delete-cancel-btn').addEventListener('click', handleReasonSelection);dialog.showModal();};
         archivePatient = async (id, reason) => {const patient = allPatients.find(p => p.id === id);const patientData = {isDeleted: true,status: 'deleted',originalStatus: patient.status,deleteReason: reason,deletedAt: new Date().toISOString()};try {const response = await fetch(`${PATIENTS_API_URL}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patientData) });if (!response.ok) throw new Error('Delete error');await loadAllData();} catch (error) { console.error("Delete failed:", error); alert("刪除失敗！"); }};
-        renderWeeklyScheduleTable = () => {const head = document.getElementById('weekly-schedule-head');const body = document.getElementById('weekly-schedule-body');head.innerHTML = `<tr><th>床位/班次</th>${WEEKDAYS.map(day => `<th>${day}</th>`).join('')}</tr>`;let bodyHtml = '';for (let i = 1; i <= TOTAL_BEDS; i++) { SHIFTS.forEach((shift, shiftIndex) => { bodyHtml += `<tr>`; if (shiftIndex === 0) { bodyHtml += `<td rowspan="3">${i}號床</td>`; } bodyHtml += `<td>${i}號床 ${shift}</td>`; WEEKDAYS.forEach((day, dayIndex) => { const slotId = `${i}-${shiftIndex}-${dayIndex}`; const schedule = weeklyScheduleData[slotId]; if (schedule) { const patient = allPatients.find(p => p.id === schedule.patientId); const patientName = patient ? `${patient.name}${generateDiseaseTags(patient.diseases)}` : '未知病人'; const patientMode = patient ? patient.mode : ''; bodyHtml += `<td data-slot-id="${slotId}"><div class="schedule-slot filled" onclick="window.app.clearScheduleSlot('${schedule.id}')"><div class="slot-patient-name">${patientName}</div><div class="slot-patient-mode">${patientMode}</div></div></td>`; } else { bodyHtml += `<td><div class="schedule-slot" data-slot-id="${slotId}" onclick="window.app.openAddScheduleDialog('${slotId}')"></div></td>`; } }); bodyHtml += `</tr>`; }); } body.innerHTML = bodyHtml; const weeklyStatsDiv = document.getElementById('weekly-stats'); const shiftCounts = { '早班': 0, '午班': 0, '晚班': 0 }; Object.values(weeklyScheduleData).forEach(s => { const shiftIndex = s.slotId.split('-')[1]; shiftCounts[SHIFTS[shiftIndex]]++; }); weeklyStatsDiv.innerHTML = Object.entries(shiftCounts).map(([shift, count]) => `${shift}: ${count}`).join('  |  '); };
-        openAddScheduleDialog = (slotId) => {const opdPatients = allPatients.filter(p => p.status === 'opd' && !p.isDeleted);const patientSelect = document.getElementById('patient-select');const patientSearch = document.getElementById('patient-search');const freqDisplay = document.getElementById('patient-freq-display');const renderOptions = (patients) => {patientSelect.innerHTML = patients.map(p => `<option value="${p.id}">${p.name} (${p.medicalRecordNumber})</option>`).join('');};renderOptions(opdPatients);patientSearch.value = '';freqDisplay.textContent = '請選擇病人';patientSearch.oninput = () => {const searchTerm = patientSearch.value.toLowerCase();const filtered = opdPatients.filter(p => p.name.toLowerCase().includes(searchTerm) || p.medicalRecordNumber.includes(searchTerm));renderOptions(filtered);};patientSelect.onchange = () => {const selectedPatientId = patientSelect.value;const patient = opdPatients.find(p => p.id === selectedPatientId);freqDisplay.textContent = patient ? patient.frequency : '請選擇病人';};patientSelect.dispatchEvent(new Event('change'));addScheduleDialog.showModal();addScheduleDialog.dataset.slotId = slotId;};
+        restorePatient = async (id) => {const patient = allPatients.find(p => p.id === id); if (!patient || !confirm(`確定要將病人「${patient.name}」復原到「${patient.originalStatus === 'ipd' ? '住院' : '門診'}」列表嗎？`)) return; const patientData = { isDeleted: false, status: patient.originalStatus, deleteReason: null, deletedAt: null }; try { const response = await fetch(`${PATIENTS_API_URL}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patientData) }); if (!response.ok) throw new Error('Restore error'); await loadAllData(); } catch (error) { console.error("Restore failed:", error); alert("復原失敗！"); }};
+        openAddScheduleDialog = (slotId) => {const opdPatients = allPatients.filter(p => p.status === 'opd' && !p.isDeleted);const patientSelect = document.getElementById('patient-select');const patientSearch = document.getElementById('patient-search');const freqDisplay = document.getElementById('patient-freq-display');const renderOptions = (patients) => {patientSelect.innerHTML = patients.map(p => `<option value="${p.id}">${p.name} (${p.medicalRecordNumber || '無病歷號'})</option>`).join('');};renderOptions(opdPatients);patientSearch.value = '';freqDisplay.textContent = '請選擇病人';patientSearch.oninput = () => {const searchTerm = patientSearch.value.toLowerCase();const filtered = opdPatients.filter(p => p.name.toLowerCase().includes(searchTerm) || (p.medicalRecordNumber && p.medicalRecordNumber.includes(searchTerm)));renderOptions(filtered);};patientSelect.onchange = () => {const selectedPatientId = patientSelect.value;const patient = opdPatients.find(p => p.id === selectedPatientId);freqDisplay.textContent = patient ? patient.frequency : '請選擇病人';};patientSelect.dispatchEvent(new Event('change'));addScheduleDialog.showModal();addScheduleDialog.dataset.slotId = slotId;};
         handleAddSchedule = async () => {const slotId = addScheduleDialog.dataset.slotId;const patientId = document.getElementById('patient-select').value;if (!patientId) {alert('請選擇一位病人！');return;}const patient = allPatients.find(p => p.id === patientId);const freq = patient.frequency;const dayIndexes = FREQ_MAP[freq];const slotsToUpdate = [];if (dayIndexes) {const [bed, shiftIndex] = slotId.split('-');dayIndexes.forEach(d_idx => {slotsToUpdate.push({slotId: `${bed}-${shiftIndex}-${d_idx}`,patientId: patientId,});});} else {slotsToUpdate.push({slotId: slotId,patientId: patientId,});}try {await Promise.all(slotsToUpdate.map(slotData => fetch(WEEKLY_SCHEDULE_API_URL, {method: 'POST',headers: { 'Content-Type': 'application/json' },body: JSON.stringify(slotData)}).then(res => {if(!res.ok) throw new Error('Failed to add schedule')})));addScheduleDialog.close();await loadAllData();} catch (error) {console.error("Failed to save weekly schedule:", error);alert('儲存排班失敗！可能該時段已有排班。');}};
-        clearScheduleSlot = async (scheduleId) => { if (!confirm('確定要清除這個排班嗎？')) return; try { const response = await fetch(`${WEEKLY_SCHEDULE_API_URL}/${scheduleId}`, { method: 'DELETE' }); if (!response.ok) throw new Error('Failed to delete'); await loadAllData(); } catch (error) { console.error("Failed to clear schedule slot:", error); alert('清除排班失敗！'); }};
-        tabButtons.forEach(button => { button.addEventListener('click', () => { const targetTab = button.dataset.tab; currentTab = targetTab; tabButtons.forEach(btn => btn.classList.remove('active')); tabContents.forEach(content => content.classList.remove('active')); button.classList.add('active'); document.getElementById(targetTab).classList.add('active'); }); });document.getElementById('add-ipd-btn').addEventListener('click', () => openModal('ipd'));document.getElementById('add-opd-btn').addEventListener('click', () => openModal('opd'));document.querySelector('.close-button').addEventListener('click', closeModal);window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });document.getElementById('add-schedule-confirm-btn').addEventListener('click', handleAddSchedule);document.getElementById('add-schedule-cancel-btn').addEventListener('click', () => addScheduleDialog.close());
-
+        clearScheduleSlot = async (scheduleId) => { if (!confirm('確定要清除這個排班嗎？')) return; try { const response = await fetch(`${WEEKLY_SCHEDULE_API_URL}/${scheduleId}`, { method: 'DELETE' }); if (!response.ok) throw new Error('Failed to delete'); delete weeklyScheduleData[Object.keys(weeklyScheduleData).find(key => weeklyScheduleData[key].id === scheduleId)]; renderAllTabs(); } catch (error) { console.error("Failed to clear schedule slot:", error); alert('清除排班失敗！'); }};
+        tabButtons.forEach(button => { button.addEventListener('click', () => { const targetTab = button.dataset.tab; currentTab = targetTab; tabButtons.forEach(btn => btn.classList.remove('active')); tabContents.forEach(content => content.classList.remove('active')); button.classList.add('active'); document.getElementById(targetTab).classList.add('active'); }); });
+        
+        // --- Initial Load ---
+        renderWeeklyScheduleTableFrame(); // 先畫出週排班的空表格
         loadAllData();
     });
     </script>
