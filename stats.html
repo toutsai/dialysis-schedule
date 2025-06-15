@@ -26,11 +26,11 @@
         .name-select:focus { outline: 2px solid #fbc02d; }
         .patient-list-cell { text-align: left; vertical-align: top; white-space: pre-wrap; min-height: 50px; }
         .patient-list-cell span { display: block; padding: 2px 4px; margin-bottom: 2px; border-radius: 3px; }
-        /* --- CHANGE START: 更新顏色定義 --- */
-        .patient-list-cell .tag-chou { background-color: #90caf9 !important; } /* 藍色 */
-        .patient-list-cell .hospitalized { background-color: #ffcdd2 !important; } /* 粉紅色 */
-        .patient-list-cell .tag-liang { background-color: #ffcc80 !important; } /* 橘色 */
-        .patient-list-cell .tag-b { background-color: #d7ccc8 !important; } /* 棕色 */
+        .patient-list-cell .tag-chou { background-color: #90caf9 !important; }
+        .patient-list-cell .hospitalized { background-color: #ffcdd2 !important; }
+        .patient-list-cell .tag-liang { background-color: #ffcc80 !important; }
+        /* --- CHANGE START: 更新 B 肝顏色 --- */
+        .patient-list-cell .tag-b { background-color: #ffe0b2 !important; }
         /* --- CHANGE END --- */
         @media print { body { padding: 10px; background-color: #fff; font-size: 8pt; } .controls, h1, .top-bar { display: none; } .container { max-width: 100%; } .table-container { box-shadow: none; } .name-select { -webkit-appearance: none; -moz-appearance: none; appearance: none; background-color: transparent; } .patient-list-cell span { background-color: inherit !important; -webkit-print-color-adjust: exact; color-adjust: exact; } }
     </style>
@@ -61,104 +61,98 @@
         </div>
     </div>
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const dateDisplay = document.getElementById('current-date-display');
-            const earlyTable = document.getElementById('early-shift-table');
-            const lateTable = document.getElementById('late-shift-table');
-            const saveNamesBtn = document.getElementById('save-names-btn');
-            const baseTeams = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', '外圍'];
-            const nurseNameList = [ "陳素秋", "古孟麗", "謝常菁", "林玉麗", "陳聖柔", "田姿瑛", "陳韋吟", "劉姿秀", "劉舒婷", "李慈賢", "黃羿寧", "高佩鳳", "林沛儀", "李汶娟", "陳芃諭", "葛孟萍", "蘇愛玲", "郭芳君", "林馨如", "賴秋妏", "胡國暄", "施艾利", "陳淑玲", "謝慶諭", "林佩佳", "吳思婷", "曾佩君", "吳幸美" ];
-            const nurseOptionsHTML = `<option value=""></option>` + nurseNameList.map(name => `<option value="${name}">${name}</option>`).join('');
+    // JavaScript 區域完全沒有變更，與 V22.2 版相同
+    document.addEventListener('DOMContentLoaded', () => {
+        const dateDisplay = document.getElementById('current-date-display');
+        const earlyTable = document.getElementById('early-shift-table');
+        const lateTable = document.getElementById('late-shift-table');
+        const saveNamesBtn = document.getElementById('save-names-btn');
+        const baseTeams = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', '外圍'];
+        const nurseNameList = [ "陳素秋", "古孟麗", "謝常菁", "林玉麗", "陳聖柔", "田姿瑛", "陳韋吟", "劉姿秀", "劉舒婷", "李慈賢", "黃羿寧", "高佩鳳", "林沛儀", "李汶娟", "陳芃諭", "葛孟萍", "蘇愛玲", "郭芳君", "林馨如", "賴秋妏", "胡國暄", "施艾利", "陳淑玲", "謝慶諭", "林佩佳", "吳思婷", "曾佩君", "吳幸美" ];
+        const nurseOptionsHTML = `<option value=""></option>` + nurseNameList.map(name => `<option value="${name}">${name}</option>`).join('');
 
-            // --- CHANGE START: 更新 formatPatientListWithColor 函式 ---
-            function formatPatientListWithColor(arr) {
-                return arr.map(patientInfo => {
-                    const upperCaseInfo = patientInfo.toUpperCase();
-                    let className = '';
-
-                    // 根據優先級 抽 > 住 > 兩 > B 進行判斷
-                    if (upperCaseInfo.includes('(抽')) {
-                        className = 'tag-chou';
-                    } else if (upperCaseInfo.includes('(住')) {
-                        className = 'hospitalized';
-                    } else if (upperCaseInfo.includes('(兩')) {
-                        className = 'tag-liang';
-                    } else if (upperCaseInfo.includes('(B')) {
-                        className = 'tag-b';
-                    }
-                    
-                    if (className) {
-                        return `<span class="${className}">${patientInfo}</span>`;
-                    }
-                    return `<span>${patientInfo}</span>`;
-                }).join('');
-            }
-            // --- CHANGE END ---
-
-            // ...其它 JS 函式 (initialize, loadReportData, generateEarlyShiftTable, generateLateShiftTable, saveNamesAndSyncBack) 保持不變 ...
-            // 為求完整，複製貼上不變的函式
-            function initialize() {
-                if (window.opener && window.opener.currentScheduleDataForStats) {
-                    const data = window.opener.currentScheduleDataForStats;
-                    loadReportData(data);
-                } else {
-                    dateDisplay.textContent = "錯誤：請從排程表頁面開啟此報表";
-                    alert("請不要直接打開此檔案。請先開啟主排程表，然後點擊「查看統計報表」。");
+        function formatPatientListWithColor(arr) {
+            return arr.map(patientInfo => {
+                const upperCaseInfo = patientInfo.toUpperCase();
+                let className = '';
+                if (upperCaseInfo.includes('(抽')) {
+                    className = 'tag-chou';
+                } else if (upperCaseInfo.includes('(住')) {
+                    className = 'hospitalized';
+                } else if (upperCaseInfo.includes('(兩')) {
+                    className = 'tag-liang';
+                } else if (upperCaseInfo.includes('(B')) {
+                    className = 'tag-b';
                 }
-            }
-            function loadReportData(fullData) {
-                const { date, schedule, names } = fullData;
-                dateDisplay.textContent = `${date} 統計報表`;
-                earlyTable.innerHTML = ''; 
-                lateTable.innerHTML = '';
-                const statsData = {};
-                const allTeams = [...baseTeams.map(t => `早${t}`), ...baseTeams.map(t => `晚${t}`)];
-                allTeams.forEach(team => { 
-                    statsData[team] = { early: [], noon_in: [], noon_out: [], late: [] }; 
-                });
-                Object.keys(schedule).forEach(id => { 
-                    const shiftData = schedule[id]; 
-                    const patientName = shiftData.patient; 
-                    if (!patientName) return; 
-                    let bedNumber; 
-                    if(id.startsWith('peripheral-')) { 
-                        bedNumber = `外圍(${shiftData.bedNumber || '?'})`; 
-                    } else { 
-                        bedNumber = id.split('-')[1]; 
-                    } 
-                    const tag = shiftData.tag ? ` (${shiftData.tag})` : ''; 
-                    const patientInfo = `${bedNumber} - ${patientName}${tag}`; 
-                    if (id.includes('-早')) {
-                        if (shiftData.nurse && statsData[shiftData.nurse]) statsData[shiftData.nurse].early.push(patientInfo);
-                    } else if (id.includes('-晚')) {
-                        if (shiftData.nurse && statsData[shiftData.nurse]) statsData[shiftData.nurse].late.push(patientInfo);
-                    } else if (id.includes('-午')) {
-                        if (shiftData.nurse_in && statsData[shiftData.nurse_in]) statsData[shiftData.nurse_in].noon_in.push(patientInfo);
-                        if (shiftData.nurse_out && statsData[shiftData.nurse_out]) statsData[shiftData.nurse_out].noon_out.push(patientInfo);
-                    }
-                });
-                generateEarlyShiftTable(earlyTable, '早', statsData, names || {});
-                generateLateShiftTable(lateTable, '晚', statsData, names || {});
-            }
-            function generateEarlyShiftTable(tableElement, shiftPrefix, statsData, statsNames) { const h = document.createElement('tr'); h.className = 'team-header-row'; h.innerHTML = `<th class="row-header"></th>`; const n = document.createElement('tr'); n.innerHTML = `<th class="row-header">姓名</th>`; const e = document.createElement('tr'); e.innerHTML = `<th class="row-header">早班</th>`; const i = document.createElement('tr'); i.innerHTML = `<th class="row-header">午班(上針)</th>`; const o = document.createElement('tr'); o.innerHTML = `<th class="row-header">午班(收針)</th>`; baseTeams.forEach(t => { const f = `${shiftPrefix}${t}`; const d = statsData[f] || { early: [], noon_in: [], noon_out: [] }; h.innerHTML += `<td>${f}組</td>`; n.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${f}">${nurseOptionsHTML}</select></td>`; e.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(d.early)}</td>`; i.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(d.noon_in)}</td>`; o.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(d.noon_out)}</td>`; }); tableElement.append(h, n, e, i, o); tableElement.querySelectorAll('.name-select').forEach(s => { if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId]; }); };
-            function generateLateShiftTable(tableElement, shiftPrefix, statsData, statsNames) { const h = document.createElement('tr'); h.className = 'team-header-row'; h.innerHTML = `<th class="row-header"></th>`; const n = document.createElement('tr'); n.innerHTML = `<th class="row-header">姓名</th>`; const o = document.createElement('tr'); o.innerHTML = `<th class="row-header">午班(收針)</th>`; const l = document.createElement('tr'); l.innerHTML = `<th class="row-header">晚班</th>`; baseTeams.forEach(t => { const f = `${shiftPrefix}${t}`; const d = statsData[f] || { noon_out: [], late: [] }; h.innerHTML += `<td>${f}組</td>`; n.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${f}">${nurseOptionsHTML}</select></td>`; o.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(d.noon_out)}</td>`; l.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(d.late)}</td>`; }); tableElement.append(h, n, o, l); tableElement.querySelectorAll('.name-select').forEach(s => { if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId]; }); };
-            function saveNamesAndSyncBack() {
-                if (!window.opener || window.opener.closed) {
-                    alert("錯誤：找不到來源的排程表頁面。請不要關閉排程表頁面。");
-                    return;
+                if (className) {
+                    return `<span class="${className}">${patientInfo}</span>`;
                 }
-                const namesToSave = {};
-                document.querySelectorAll('.name-select').forEach(select => {
-                    namesToSave[select.dataset.teamId] = select.value;
-                });
-                window.opener.updateNamesFromStats(namesToSave);
-                window.close();
+                return `<span>${patientInfo}</span>`;
+            }).join('');
+        }
+        
+        function initialize() {
+            if (window.opener && window.opener.currentScheduleDataForStats) {
+                const data = window.opener.currentScheduleDataForStats;
+                loadReportData(data);
+            } else {
+                dateDisplay.textContent = "錯誤：請從排程表頁面開啟此報表";
+                alert("請不要直接打開此檔案。請先開啟主排程表，然後點擊「查看統計報表」。");
             }
-            
-            saveNamesBtn.addEventListener('click', saveNamesAndSyncBack);
-            
-            initialize();
-        });
+        }
+        function loadReportData(fullData) {
+            const { date, schedule, names } = fullData;
+            dateDisplay.textContent = `${date} 統計報表`;
+            earlyTable.innerHTML = ''; 
+            lateTable.innerHTML = '';
+            const statsData = {};
+            const allTeams = [...baseTeams.map(t => `早${t}`), ...baseTeams.map(t => `晚${t}`)];
+            allTeams.forEach(team => { 
+                statsData[team] = { early: [], noon_in: [], noon_out: [], late: [] }; 
+            });
+            Object.keys(schedule).forEach(id => { 
+                const shiftData = schedule[id]; 
+                const patientName = shiftData.patient; 
+                if (!patientName) return; 
+                let bedNumber; 
+                if(id.startsWith('peripheral-')) { 
+                    bedNumber = `外圍(${shiftData.bedNumber || '?'})`; 
+                } else { 
+                    bedNumber = id.split('-')[1]; 
+                } 
+                const tag = shiftData.tag ? ` (${shiftData.tag})` : ''; 
+                const patientInfo = `${bedNumber} - ${patientName}${tag}`; 
+                if (id.includes('-早')) {
+                    if (shiftData.nurse && statsData[shiftData.nurse]) statsData[shiftData.nurse].early.push(patientInfo);
+                } else if (id.includes('-晚')) {
+                    if (shiftData.nurse && statsData[shiftData.nurse]) statsData[shiftData.nurse].late.push(patientInfo);
+                } else if (id.includes('-午')) {
+                    if (shiftData.nurse_in && statsData[shiftData.nurse_in]) statsData[shiftData.nurse_in].noon_in.push(patientInfo);
+                    if (shiftData.nurse_out && statsData[shiftData.nurse_out]) statsData[shiftData.nurse_out].noon_out.push(patientInfo);
+                }
+            });
+            generateEarlyShiftTable(earlyTable, '早', statsData, names || {});
+            generateLateShiftTable(lateTable, '晚', statsData, names || {});
+        }
+        function generateEarlyShiftTable(tableElement, shiftPrefix, statsData, statsNames) { const h = document.createElement('tr'); h.className = 'team-header-row'; h.innerHTML = `<th class="row-header"></th>`; const n = document.createElement('tr'); n.innerHTML = `<th class="row-header">姓名</th>`; const e = document.createElement('tr'); e.innerHTML = `<th class="row-header">早班</th>`; const i = document.createElement('tr'); i.innerHTML = `<th class="row-header">午班(上針)</th>`; const o = document.createElement('tr'); o.innerHTML = `<th class="row-header">午班(收針)</th>`; baseTeams.forEach(t => { const f = `${shiftPrefix}${t}`; const d = statsData[f] || { early: [], noon_in: [], noon_out: [] }; h.innerHTML += `<td>${f}組</td>`; n.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${f}">${nurseOptionsHTML}</select></td>`; e.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(d.early)}</td>`; i.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(d.noon_in)}</td>`; o.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(d.noon_out)}</td>`; }); tableElement.append(h, n, e, i, o); tableElement.querySelectorAll('.name-select').forEach(s => { if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId]; }); };
+        function generateLateShiftTable(tableElement, shiftPrefix, statsData, statsNames) { const h = document.createElement('tr'); h.className = 'team-header-row'; h.innerHTML = `<th class="row-header"></th>`; const n = document.createElement('tr'); n.innerHTML = `<th class="row-header">姓名</th>`; const o = document.createElement('tr'); o.innerHTML = `<th class="row-header">午班(收針)</th>`; const l = document.createElement('tr'); l.innerHTML = `<th class="row-header">晚班</th>`; baseTeams.forEach(t => { const f = `${shiftPrefix}${t}`; const d = statsData[f] || { noon_out: [], late: [] }; h.innerHTML += `<td>${f}組</td>`; n.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${f}">${nurseOptionsHTML}</select></td>`; o.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(d.noon_out)}</td>`; l.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(d.late)}</td>`; }); tableElement.append(h, n, o, l); tableElement.querySelectorAll('.name-select').forEach(s => { if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId]; }); };
+        function saveNamesAndSyncBack() {
+            if (!window.opener || window.opener.closed) {
+                alert("錯誤：找不到來源的排程表頁面。請不要關閉排程表頁面。");
+                return;
+            }
+            const namesToSave = {};
+            document.querySelectorAll('.name-select').forEach(select => {
+                namesToSave[select.dataset.teamId] = select.value;
+            });
+            window.opener.updateNamesFromStats(namesToSave);
+            window.close();
+        }
+        
+        saveNamesBtn.addEventListener('click', saveNamesAndSyncBack);
+        
+        initialize();
+    });
     </script>
 </body>
 </html>
