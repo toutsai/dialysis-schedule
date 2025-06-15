@@ -2,9 +2,9 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>護理師組別統計報表 (V22.5 - 外圍午班修正版)</title>
+    <title>護理師組別統計報表 (V22.6 - 報表結構優化版)</title>
     <style>
-        /* CSS 與 V22.4 完全相同 */
+        /* CSS 與 V22.5 完全相同 */
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; padding: 20px; background-color: #f9f9f9; }
         .top-bar { display: flex; justify-content: space-between; align-items: center; max-width: 100%; margin: 0 auto 20px; }
         h1 { text-align: center; color: #333; flex-grow: 1; }
@@ -35,7 +35,6 @@
     </style>
 </head>
 <body>
-    <!-- HTML Body 結構無變更 -->
     <div class="top-bar">
         <div class="date-navigator">
             <button id="prev-date-btn" class="date-nav-btn"><</button>
@@ -56,6 +55,14 @@
                 <table class="stats-table" id="early-shift-table"></table>
             </div>
         </div>
+        <!-- --- CHANGE START: 新增午班(外圍/全責)表格 --- -->
+        <div class="stats-section" id="noon-shift-section">
+            <h2>午班(外圍/全責)組別</h2>
+            <div class="table-container">
+                <table class="stats-table" id="noon-shift-table"></table>
+            </div>
+        </div>
+        <!-- --- CHANGE END --- -->
         <div class="stats-section">
             <h2>晚班組別</h2>
             <div class="table-container">
@@ -73,16 +80,33 @@
         const dateDisplay = document.getElementById('current-date-display');
         const earlyTable = document.getElementById('early-shift-table');
         const lateTable = document.getElementById('late-shift-table');
+        // --- CHANGE START: 取得新表格的元素 ---
+        const noonSection = document.getElementById('noon-shift-section');
+        const noonTable = document.getElementById('noon-shift-table');
+        // --- CHANGE END ---
+        
         const saveNamesBtn = document.getElementById('save-names-btn');
         const baseTeams = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', '外圍'];
+        // --- CHANGE START: 建立午班專用的護理師選項 ---
+        const earlyTeams = baseTeams.map(t => `早${t}`);
+        const lateTeams = baseTeams.map(t => `晚${t}`);
+        const allTeams = [...earlyTeams, ...lateTeams];
+        const earlyOptionsHTML = `<option value=""></option>` + earlyTeams.map(name => `<option value="${name}">${name}組</option>`).join('');
+        const lateOptionsHTML = `<option value=""></option>` + lateTeams.map(name => `<option value="${name}">${name}組</option>`).join('');
+        const noonOptionsHTML = `<option value=""></option>` + allTeams.map(name => `<option value="${name}">${name}組</option>`).join(''); // 午班可能來自早班或晚班
+        // --- CHANGE END ---
+        
         const nurseNameList = [ "陳素秋", "古孟麗", "謝常菁", "林玉麗", "陳聖柔", "田姿瑛", "陳韋吟", "劉姿秀", "劉舒婷", "李慈賢", "黃羿寧", "高佩鳳", "林沛儀", "李汶娟", "陳芃諭", "葛孟萍", "蘇愛玲", "郭芳君", "林馨如", "賴秋妏", "胡國暄", "施艾利", "陳淑玲", "謝慶諭", "林佩佳", "吳思婷", "曾佩君", "吳幸美" ];
         const nurseOptionsHTML = `<option value=""></option>` + nurseNameList.map(name => `<option value="${name}">${name}</option>`).join('');
+        
         const formatDate = (date) => date.toISOString().split('T')[0];
         const setStatus = (message) => { statusIndicator.textContent = message; };
 
         async function loadStatsFromCloud(dateStr) {
             earlyTable.innerHTML = '';
             lateTable.innerHTML = '';
+            noonTable.innerHTML = ''; // 清空新表格
+            noonSection.style.display = 'none'; // 預設隱藏
             currentRecord = null;
             setStatus('讀取中...');
             dateDisplay.textContent = `${dateStr} 統計報表`;
@@ -107,46 +131,17 @@
             }
         }
         
-        async function saveNamesToCloud() {
-            if (!currentRecord) {
-                alert("目前日期沒有排程資料，無法儲存姓名。");
-                return;
-            }
-            const newNames = {};
-            document.querySelectorAll('.name-select').forEach(select => {
-                newNames[select.dataset.teamId] = select.value;
-            });
-            currentRecord.names = newNames;
-            setStatus('儲存中...');
-            try {
-                const response = await fetch(`${API_BASE_URL}/${currentRecord.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(currentRecord)
-                });
-                if (!response.ok) throw new Error('Network response was not ok');
-                setStatus(`姓名資料已於 ${new Date().toLocaleTimeString()} 儲存成功`);
-                alert('護理師姓名資料已成功儲存至雲端！');
-            } catch (error) {
-                console.error('儲存姓名失敗:', error);
-                setStatus('儲存失敗');
-                alert('儲存姓名失敗，請稍後再試。');
-            }
-        }
-        
-        function initialize() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const dateFromUrl = urlParams.get('date');
-            currentDate = dateFromUrl ? new Date(dateFromUrl + 'T00:00:00') : new Date();
-            loadStatsFromCloud(formatDate(currentDate));
-        }
+        async function saveNamesToCloud() { /* ...此函式無變動... */ }
+        function initialize() { /* ...此函式無變動... */ }
 
-        // --- CHANGE START: 修正 loadReportData 中的午班處理邏輯 ---
+        // --- CHANGE START: 全面重寫資料處理與表格生成邏輯 ---
         function loadReportData(fullData) {
             const { schedule, names } = fullData;
             const statsData = {};
-            const allTeams = [...baseTeams.map(t => `早${t}`), ...baseTeams.map(t => `晚${t}`)];
-            allTeams.forEach(team => { statsData[team] = { early: [], noon_in: [], noon_out: [], late: [] }; });
+            const allNurseTeams = [...earlyTeams, ...lateTeams];
+            allNurseTeams.forEach(team => { 
+                statsData[team] = { early: [], noon_in: [], noon_out: [], late: [], noon_full: [] }; 
+            });
 
             Object.keys(schedule).forEach(id => { 
                 const shiftData = schedule[id]; 
@@ -166,37 +161,94 @@
                 } else if (id.includes('-晚')) {
                     if (shiftData.nurse && statsData[shiftData.nurse]) statsData[shiftData.nurse].late.push(patientInfo);
                 } else if (id.includes('-午')) {
-                    // 處理正規床位的 split-shift
-                    if (shiftData.nurse_in && statsData[shiftData.nurse_in]) {
-                        statsData[shiftData.nurse_in].noon_in.push(patientInfo);
-                    }
-                    if (shiftData.nurse_out && statsData[shiftData.nurse_out]) {
-                        statsData[shiftData.nurse_out].noon_out.push(patientInfo);
-                    }
-                    // 【新邏輯】處理外圍床位的 single-nurse shift
-                    if (shiftData.nurse && statsData[shiftData.nurse]) {
-                        statsData[shiftData.nurse].noon_in.push(patientInfo);
-                        statsData[shiftData.nurse].noon_out.push(patientInfo);
+                    // 正規床位的 split-shift
+                    if (shiftData.hasOwnProperty('nurse_in') || shiftData.hasOwnProperty('nurse_out')) {
+                        if (shiftData.nurse_in && statsData[shiftData.nurse_in]) {
+                            statsData[shiftData.nurse_in].noon_in.push(patientInfo);
+                        }
+                        if (shiftData.nurse_out && statsData[shiftData.nurse_out]) {
+                            statsData[shiftData.nurse_out].noon_out.push(patientInfo);
+                        }
+                    } 
+                    // 外圍床位的 single-nurse shift
+                    else if (shiftData.nurse && statsData[shiftData.nurse]) {
+                        statsData[shiftData.nurse].noon_full.push(patientInfo);
                     }
                 }
             });
             generateEarlyShiftTable(earlyTable, '早', statsData, names || {});
             generateLateShiftTable(lateTable, '晚', statsData, names || {});
+            generateNoonShiftTable(noonTable, statsData, names || {});
         }
-        // --- CHANGE END ---
         
         function formatPatientListWithColor(arr) { return arr.map(p => { const u = p.toUpperCase(); let c = ''; if (u.includes('(抽')) c = 'tag-chou'; else if (u.includes('(住')) c = 'hospitalized'; else if (u.includes('(兩')) c = 'tag-liang'; else if (u.includes('(B')) c = 'tag-b'; return c ? `<span class="${c}">${p}</span>` : `<span>${p}</span>`; }).join(''); }
-        function generateEarlyShiftTable(tableElement, shiftPrefix, statsData, statsNames) { const h = document.createElement('tr'); h.className = 'team-header-row'; h.innerHTML = `<th class="row-header"></th>`; const n = document.createElement('tr'); n.innerHTML = `<th class="row-header">姓名</th>`; const e = document.createElement('tr'); e.innerHTML = `<th class="row-header">早班</th>`; const i = document.createElement('tr'); i.innerHTML = `<th class="row-header">午班(上針)</th>`; const o = document.createElement('tr'); o.innerHTML = `<th class="row-header">午班(收針)</th>`; baseTeams.forEach(t => { const f = `${shiftPrefix}${t}`; const d = statsData[f] || { early: [], noon_in: [], noon_out: [] }; h.innerHTML += `<td>${f}組</td>`; n.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${f}">${nurseOptionsHTML}</select></td>`; e.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(d.early)}</td>`; i.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(d.noon_in)}</td>`; o.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(d.noon_out)}</td>`; }); tableElement.append(h, n, e, i, o); tableElement.querySelectorAll('.name-select').forEach(s => { if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId]; }); };
-        function generateLateShiftTable(tableElement, shiftPrefix, statsData, statsNames) { const h = document.createElement('tr'); h.className = 'team-header-row'; h.innerHTML = `<th class="row-header"></th>`; const n = document.createElement('tr'); n.innerHTML = `<th class="row-header">姓名</th>`; const o = document.createElement('tr'); o.innerHTML = `<th class="row-header">午班(收針)</th>`; const l = document.createElement('tr'); l.innerHTML = `<th class="row-header">晚班</th>`; baseTeams.forEach(t => { const f = `${shiftPrefix}${t}`; const d = statsData[f] || { noon_out: [], late: [] }; h.innerHTML += `<td>${f}組</td>`; n.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${f}">${nurseOptionsHTML}</select></td>`; o.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(d.noon_out)}</td>`; l.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(d.late)}</td>`; }); tableElement.append(h, n, o, l); tableElement.querySelectorAll('.name-select').forEach(s => { if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId]; }); };
+        
+        function generateEarlyShiftTable(tableElement, shiftPrefix, statsData, statsNames) {
+            tableElement.innerHTML = '';
+            const headerRow = document.createElement('tr'); headerRow.className = 'team-header-row'; headerRow.innerHTML = `<th class="row-header"></th>`;
+            const nameRow = document.createElement('tr'); nameRow.innerHTML = `<th class="row-header">姓名</th>`;
+            const earlyPatientsRow = document.createElement('tr'); earlyPatientsRow.innerHTML = `<th class="row-header">早班</th>`;
+            const noonInPatientsRow = document.createElement('tr'); noonInPatientsRow.innerHTML = `<th class="row-header">午班(上針)</th>`;
 
-        function changeDate(days) {
-            currentDate.setDate(currentDate.getDate() + days);
-            const newUrl = new URL(window.location);
-            newUrl.searchParams.set('date', formatDate(currentDate));
-            window.history.pushState({}, '', newUrl);
-            loadStatsFromCloud(formatDate(currentDate));
+            earlyTeams.forEach(team => {
+                const teamData = statsData[team];
+                headerRow.innerHTML += `<td>${team}組</td>`;
+                nameRow.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${team}">${nurseOptionsHTML}</select></td>`;
+                earlyPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.early)}</td>`;
+                noonInPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.noon_in)}</td>`;
+            });
+            tableElement.append(headerRow, nameRow, earlyPatientsRow, noonInPatientsRow);
+            tableElement.querySelectorAll('.name-select').forEach(s => { if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId]; });
         }
 
+        function generateLateShiftTable(tableElement, shiftPrefix, statsData, statsNames) {
+            tableElement.innerHTML = '';
+            const headerRow = document.createElement('tr'); headerRow.className = 'team-header-row'; headerRow.innerHTML = `<th class="row-header"></th>`;
+            const nameRow = document.createElement('tr'); nameRow.innerHTML = `<th class="row-header">姓名</th>`;
+            const noonOutPatientsRow = document.createElement('tr'); noonOutPatientsRow.innerHTML = `<th class="row-header">午班(收針)</th>`;
+            const latePatientsRow = document.createElement('tr'); latePatientsRow.innerHTML = `<th class="row-header">晚班</th>`;
+
+            lateTeams.forEach(team => {
+                const teamData = statsData[team];
+                headerRow.innerHTML += `<td>${team}組</td>`;
+                nameRow.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${team}">${nurseOptionsHTML}</select></td>`;
+                noonOutPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.noon_out)}</td>`;
+                latePatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.late)}</td>`;
+            });
+            tableElement.append(headerRow, nameRow, noonOutPatientsRow, latePatientsRow);
+            tableElement.querySelectorAll('.name-select').forEach(s => { if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId]; });
+        }
+
+        function generateNoonShiftTable(tableElement, statsData, statsNames) {
+            tableElement.innerHTML = '';
+            // 找出所有需要負責午班全責的護理師組別
+            const noonTeams = Object.keys(statsData).filter(team => statsData[team].noon_full.length > 0);
+
+            if (noonTeams.length === 0) {
+                noonSection.style.display = 'none'; // 如果沒人負責午班全責，就隱藏這個區塊
+                return;
+            }
+
+            noonSection.style.display = 'block'; // 否則顯示區塊
+            const headerRow = document.createElement('tr'); headerRow.className = 'team-header-row'; headerRow.innerHTML = `<th class="row-header"></th>`;
+            const nameRow = document.createElement('tr'); nameRow.innerHTML = `<th class="row-header">姓名</th>`;
+            const noonFullPatientsRow = document.createElement('tr'); noonFullPatientsRow.innerHTML = `<th class="row-header">午班</th>`;
+            
+            // 根據所需的組別動態生成表格
+            noonTeams.forEach(team => {
+                headerRow.innerHTML += `<td>${team}組</td>`;
+                nameRow.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${team}">${nurseOptionsHTML}</select></td>`;
+                noonFullPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(statsData[team].noon_full)}</td>`;
+            });
+
+            tableElement.append(headerRow, nameRow, noonFullPatientsRow);
+            tableElement.querySelectorAll('.name-select').forEach(s => { if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId]; });
+        }
+        // --- CHANGE END ---
+
+        function changeDate(days) { /* ...此函式無變動... */ }
+        
+        // --- 事件綁定 ---
         saveNamesBtn.addEventListener('click', saveNamesToCloud);
         document.getElementById('prev-date-btn').addEventListener('click', () => changeDate(-1));
         document.getElementById('next-date-btn').addEventListener('click', () => changeDate(1));
@@ -207,6 +259,11 @@
             window.history.pushState({}, '', newUrl);
             loadStatsFromCloud(formatDate(currentDate));
         });
+        
+        // 為了完整性複製貼上不變的函式
+        saveNamesToCloud = async () => { if (!currentRecord) { alert("目前日期沒有排程資料，無法儲存姓名。"); return; } const newNames = {}; document.querySelectorAll('.name-select').forEach(select => { newNames[select.dataset.teamId] = select.value; }); currentRecord.names = newNames; setStatus('儲存中...'); try { const response = await fetch(`${API_BASE_URL}/${currentRecord.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(currentRecord) }); if (!response.ok) throw new Error('Network response was not ok'); setStatus(`姓名資料已於 ${new Date().toLocaleTimeString()} 儲存成功`); alert('護理師姓名資料已成功儲存至雲端！'); } catch (error) { console.error('儲存姓名失敗:', error); setStatus('儲存失敗'); alert('儲存姓名失敗，請稍後再試。'); } };
+        initialize = () => { const urlParams = new URLSearchParams(window.location.search); const dateFromUrl = urlParams.get('date'); currentDate = dateFromUrl ? new Date(dateFromUrl + 'T00:00:00') : new Date(); loadStatsFromCloud(formatDate(currentDate)); };
+        changeDate = (days) => { currentDate.setDate(currentDate.getDate() + days); const newUrl = new URL(window.location); newUrl.searchParams.set('date', formatDate(currentDate)); window.history.pushState({}, '', newUrl); loadStatsFromCloud(formatDate(currentDate)); };
         
         initialize();
     });
