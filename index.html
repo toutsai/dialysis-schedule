@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>洗腎室床位病人排程表 (V22.2 - 功能修復版)</title>
+    <title>洗腎室床位病人排程表 (V22.3 - B肝顏色同步版)</title>
     <style>
-        /* CSS 區域無任何變更 */
+        /* CSS 與前一版大部分相同 */
         body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .controls-panel { max-width: 1800px; margin: 0 auto 20px; padding: 15px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
         .controls-panel button { padding: 8px 15px; font-size: 1em; border-radius: 5px; border: 1px solid #ccc; background-color: #e9e9e9; cursor: pointer; transition: background-color 0.2s; }
@@ -69,14 +69,17 @@
         .patient-tag:empty::before { content: "備註"; color: #aaa; font-style: italic; }
         .patient-name:empty, .peripheral-patient-name:empty { background-color: #dcdcdc; }
         .nurse-team-select:has(option[value=""]:checked) { background-color: #dcdcdc !important; }
-        .patient-name.tag-chou, .peripheral-patient-name.tag-chou { background-color: #90caf9 !important; }
-        .patient-name.hospitalized, .peripheral-patient-name.hospitalized { background-color: #ffcdd2 !important; }
-        .patient-name.tag-liang, .peripheral-patient-name.tag-liang { background-color: #ffcc80 !important; }
-        .patient-name.tag-b, .peripheral-patient-name.tag-b { background-color: #d7ccc8 !important; }
+        .patient-name.tag-chou, .peripheral-patient-name.tag-chou { background-color: #90caf9 !important; } /* 藍色 */
+        .patient-name.hospitalized, .peripheral-patient-name.hospitalized { background-color: #ffcdd2 !important; } /* 粉紅色 */
+        .patient-name.tag-liang, .peripheral-patient-name.tag-liang { background-color: #ffcc80 !important; } /* 橘色 */
+        /* --- CHANGE START: 更新 B 肝顏色 --- */
+        .patient-name.tag-b, .peripheral-patient-name.tag-b { background-color: #ffe0b2 !important; } /* 橘黃色 (同BC肝炎床頭) */
+        /* --- CHANGE END --- */
         @media print { body { padding: 0; background-color: #fff; } .controls-panel, .aisle, .date-navigator, .status-indicator { display: none; } h1 { font-size: 1.5em; } .dialysis-unit, .extra-sections { max-width: 100%; box-shadow: none; } .bed, .nursing-station, .peripheral-bed, .peripheral-section { border: 1px solid #000; box-shadow: none; page-break-inside: avoid; } .bed-row, .peripheral-bed-container { gap: 5px; } .shift-row, .peripheral-shift-row { font-size: 0.8em; } .patient-name:empty::before, .peripheral-bed-number:empty::before, .peripheral-patient-name:empty::before { content: ""; } select { -webkit-appearance: none; -moz-appearance: none; appearance: none; border: none; background: transparent; } .nurse-team-select:has(option[value=""]:checked) { background-color: transparent !important; } .patient-name.hospitalized, .peripheral-patient-name.hospitalized, .patient-name.tag-b, .peripheral-patient-name.tag-b, .patient-name.tag-chou, .peripheral-patient-name.tag-chou, .patient-name.tag-liang, .peripheral-patient-name.tag-liang { background-color: inherit !important; -webkit-print-color-adjust: exact; color-adjust: exact; } }
     </style>
 </head>
 <body>
+    <!-- HTML Body 結構無變更 -->
     <div class="date-navigator">
         <button id="prev-date-btn" class="date-nav-btn"><</button>
         <h1 id="current-date-display"></h1>
@@ -114,6 +117,7 @@
     </div>
 
     <script>
+    // JavaScript 區域完全沒有變更，與 V22.2 版相同
     document.addEventListener('DOMContentLoaded', function() {
         const API_BASE_URL = 'https://684eb206f0c9c9848d28d637.mockapi.io/schedules';
 
@@ -140,7 +144,6 @@
         function createBedElement(bedNumber, isHepatitis, isAisleSide, wingClass) { if (bedNumber === null) { const p = document.createElement('div'); p.className = 'bed placeholder'; return p; } const bedDiv = document.createElement('div'); bedDiv.className = `bed ${wingClass}`; bedDiv.dataset.bedId = `bed-${bedNumber}`; if (isAisleSide) bedDiv.classList.add('aisle-side'); if (isHepatitis) bedDiv.classList.add('hepatitis'); if (bedNumber === '空') bedDiv.classList.add('unassigned'); let headerText = `床號 ${bedNumber}`; if (bedNumber === '空') headerText = '未排床'; else if (isHepatitis) headerText += ' (BC肝炎)'; const shiftRowsHTML = ['早', '午', '晚'].map(shift => { const shiftId = `bed-${bedNumber}-${shift}`; if (shift === '午') { const nurseInOptions = earlyOptionsHTML; const nurseOutOptions = allOptionsHTML; return `<div class="shift-row split-shift" data-shift-id="${shiftId}"><div class="shift-label">午</div><div class="nurse-split-column"><select class="nurse-team-select nurse-in" title=""><option value="">上針</option>${nurseInOptions}</select><select class="nurse-team-select nurse-out" title=""><option value="">收針</option>${nurseOutOptions}</select></div><div class="patient-name" contenteditable="true"></div><div class="patient-tag" contenteditable="true"></div></div>`; } else { const options = shift === '早' ? earlyOptionsHTML : lateOptionsHTML; return `<div class="shift-row" data-shift-id="${shiftId}"><div class="shift-label">${shift}</div><select class="nurse-team-select" title=""><option value="">-</option>${options}</select><div class="patient-name" contenteditable="true"></div><div class="patient-tag" contenteditable="true"></div></div>`; } }).join(''); bedDiv.innerHTML = `<div class="bed-header">${headerText}</div>${bedNumber !== '空' ? shiftRowsHTML : ''}`; return bedDiv; }
         function createPeripheralBedElement(index) { const bedDiv = document.createElement('div'); bedDiv.className = 'peripheral-bed'; const shiftRowsHTML = ['早', '午', '晚'].map(shift => { let options; switch (shift) { case '早': options = earlyOptionsHTML; break; case '晚': options = lateOptionsHTML; break; case '午': options = allOptionsHTML; break; } return `<div class="peripheral-shift-row" data-shift-id="peripheral-${index}-${shift}"><div class="shift-label">${shift}</div><select class="nurse-team-select" title=""><option value="">-</option>${options}</select><div class="peripheral-bed-number" contenteditable="true"></div><div class="peripheral-patient-name" contenteditable="true"></div><div class="patient-tag" contenteditable="true"></div></div>`; }).join(''); bedDiv.innerHTML = `<div class="peripheral-header">外圍床位 ${index}</div>${shiftRowsHTML}`; return bedDiv; }
 
-        // --- CHANGE START: 恢復先前版本中被誤刪的函式實作 ---
         const formatDate = (date) => date.toISOString().split('T')[0];
 
         const updateDateDisplay = () => {
@@ -219,8 +222,6 @@
                 }
             });
         };
-        // --- CHANGE END ---
-
 
         function collectDataFromUI() {
             const scheduleData = {};
@@ -374,7 +375,6 @@
             loadDataFromCloud(formatDate(currentDate));
         }
 
-        // --- 事件綁定 ---
         document.getElementById('prev-date-btn').addEventListener('click', () => changeDate(-1));
         document.getElementById('next-date-btn').addEventListener('click', () => changeDate(1));
         document.getElementById('today-btn').addEventListener('click', () => { currentDate = new Date(); updateDateDisplay(); loadDataFromCloud(formatDate(currentDate)); });
@@ -392,7 +392,6 @@
             }
         });
         
-        // --- 初始化 ---
         generateWingLayout(leftWing, layoutData.leftWingRows, 'left-wing-bed');
         generateWingLayout(rightWing, layoutData.rightWingRows, 'right-wing-bed');
         const nursingStationRow = document.createElement('div'); nursingStationRow.className = 'bed-row'; nursingStationRow.innerHTML = '<div class="nursing-station">護理站</div>'; leftWing.appendChild(nursingStationRow);
