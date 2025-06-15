@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>洗腎室床位病人排程表 (V22.1 - 更新顏色邏輯版)</title>
+    <title>洗腎室床位病人排程表 (V22.2 - 功能修復版)</title>
     <style>
-        /* CSS 與前一版大部分相同 */
+        /* CSS 區域無任何變更 */
         body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .controls-panel { max-width: 1800px; margin: 0 auto 20px; padding: 15px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
         .controls-panel button { padding: 8px 15px; font-size: 1em; border-radius: 5px; border: 1px solid #ccc; background-color: #e9e9e9; cursor: pointer; transition: background-color 0.2s; }
@@ -69,17 +69,14 @@
         .patient-tag:empty::before { content: "備註"; color: #aaa; font-style: italic; }
         .patient-name:empty, .peripheral-patient-name:empty { background-color: #dcdcdc; }
         .nurse-team-select:has(option[value=""]:checked) { background-color: #dcdcdc !important; }
-        /* --- CHANGE START: 更新顏色定義 --- */
-        .patient-name.tag-chou, .peripheral-patient-name.tag-chou { background-color: #90caf9 !important; } /* 藍色 */
-        .patient-name.hospitalized, .peripheral-patient-name.hospitalized { background-color: #ffcdd2 !important; } /* 粉紅色 */
-        .patient-name.tag-liang, .peripheral-patient-name.tag-liang { background-color: #ffcc80 !important; } /* 橘色 */
-        .patient-name.tag-b, .peripheral-patient-name.tag-b { background-color: #d7ccc8 !important; } /* 棕色 (brown-grey) */
-        /* --- CHANGE END --- */
+        .patient-name.tag-chou, .peripheral-patient-name.tag-chou { background-color: #90caf9 !important; }
+        .patient-name.hospitalized, .peripheral-patient-name.hospitalized { background-color: #ffcdd2 !important; }
+        .patient-name.tag-liang, .peripheral-patient-name.tag-liang { background-color: #ffcc80 !important; }
+        .patient-name.tag-b, .peripheral-patient-name.tag-b { background-color: #d7ccc8 !important; }
         @media print { body { padding: 0; background-color: #fff; } .controls-panel, .aisle, .date-navigator, .status-indicator { display: none; } h1 { font-size: 1.5em; } .dialysis-unit, .extra-sections { max-width: 100%; box-shadow: none; } .bed, .nursing-station, .peripheral-bed, .peripheral-section { border: 1px solid #000; box-shadow: none; page-break-inside: avoid; } .bed-row, .peripheral-bed-container { gap: 5px; } .shift-row, .peripheral-shift-row { font-size: 0.8em; } .patient-name:empty::before, .peripheral-bed-number:empty::before, .peripheral-patient-name:empty::before { content: ""; } select { -webkit-appearance: none; -moz-appearance: none; appearance: none; border: none; background: transparent; } .nurse-team-select:has(option[value=""]:checked) { background-color: transparent !important; } .patient-name.hospitalized, .peripheral-patient-name.hospitalized, .patient-name.tag-b, .peripheral-patient-name.tag-b, .patient-name.tag-chou, .peripheral-patient-name.tag-chou, .patient-name.tag-liang, .peripheral-patient-name.tag-liang { background-color: inherit !important; -webkit-print-color-adjust: exact; color-adjust: exact; } }
     </style>
 </head>
 <body>
-    <!-- HTML Body 結構無變更 -->
     <div class="date-navigator">
         <button id="prev-date-btn" class="date-nav-btn"><</button>
         <h1 id="current-date-display"></h1>
@@ -120,11 +117,11 @@
     document.addEventListener('DOMContentLoaded', function() {
         const API_BASE_URL = 'https://684eb206f0c9c9848d28d637.mockapi.io/schedules';
 
-        // ...其它變數和佈局生成函數與前一版相同...
         let currentDate = new Date();
-        let currentRecordId = null; 
-        let currentNamesData = {}; 
+        let currentRecordId = null;
+        let currentNamesData = {};
         const statusIndicator = document.getElementById('status-indicator');
+
         const baseTeams = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', '外圍'];
         const earlyTeams = baseTeams.map(t => `早${t}`);
         const lateTeams = baseTeams.map(t => `晚${t}`);
@@ -143,23 +140,58 @@
         function createBedElement(bedNumber, isHepatitis, isAisleSide, wingClass) { if (bedNumber === null) { const p = document.createElement('div'); p.className = 'bed placeholder'; return p; } const bedDiv = document.createElement('div'); bedDiv.className = `bed ${wingClass}`; bedDiv.dataset.bedId = `bed-${bedNumber}`; if (isAisleSide) bedDiv.classList.add('aisle-side'); if (isHepatitis) bedDiv.classList.add('hepatitis'); if (bedNumber === '空') bedDiv.classList.add('unassigned'); let headerText = `床號 ${bedNumber}`; if (bedNumber === '空') headerText = '未排床'; else if (isHepatitis) headerText += ' (BC肝炎)'; const shiftRowsHTML = ['早', '午', '晚'].map(shift => { const shiftId = `bed-${bedNumber}-${shift}`; if (shift === '午') { const nurseInOptions = earlyOptionsHTML; const nurseOutOptions = allOptionsHTML; return `<div class="shift-row split-shift" data-shift-id="${shiftId}"><div class="shift-label">午</div><div class="nurse-split-column"><select class="nurse-team-select nurse-in" title=""><option value="">上針</option>${nurseInOptions}</select><select class="nurse-team-select nurse-out" title=""><option value="">收針</option>${nurseOutOptions}</select></div><div class="patient-name" contenteditable="true"></div><div class="patient-tag" contenteditable="true"></div></div>`; } else { const options = shift === '早' ? earlyOptionsHTML : lateOptionsHTML; return `<div class="shift-row" data-shift-id="${shiftId}"><div class="shift-label">${shift}</div><select class="nurse-team-select" title=""><option value="">-</option>${options}</select><div class="patient-name" contenteditable="true"></div><div class="patient-tag" contenteditable="true"></div></div>`; } }).join(''); bedDiv.innerHTML = `<div class="bed-header">${headerText}</div>${bedNumber !== '空' ? shiftRowsHTML : ''}`; return bedDiv; }
         function createPeripheralBedElement(index) { const bedDiv = document.createElement('div'); bedDiv.className = 'peripheral-bed'; const shiftRowsHTML = ['早', '午', '晚'].map(shift => { let options; switch (shift) { case '早': options = earlyOptionsHTML; break; case '晚': options = lateOptionsHTML; break; case '午': options = allOptionsHTML; break; } return `<div class="peripheral-shift-row" data-shift-id="peripheral-${index}-${shift}"><div class="shift-label">${shift}</div><select class="nurse-team-select" title=""><option value="">-</option>${options}</select><div class="peripheral-bed-number" contenteditable="true"></div><div class="peripheral-patient-name" contenteditable="true"></div><div class="patient-tag" contenteditable="true"></div></div>`; }).join(''); bedDiv.innerHTML = `<div class="peripheral-header">外圍床位 ${index}</div>${shiftRowsHTML}`; return bedDiv; }
 
-
+        // --- CHANGE START: 恢復先前版本中被誤刪的函式實作 ---
         const formatDate = (date) => date.toISOString().split('T')[0];
-        const updateDateDisplay = () => { /* ...與前一版相同... */ };
-        const setStatus = (message, type) => { /* ...與前一版相同... */ };
-        function clearBoard() { /* ...與前一版相同... */ }
 
-        // --- CHANGE START: 重寫 checkTagStatus 函式 ---
+        const updateDateDisplay = () => {
+            const dateStr = formatDate(currentDate);
+            document.getElementById('current-date-display').textContent = dateStr;
+            document.getElementById('copy-source-date').value = dateStr;
+        };
+        
+        const setStatus = (message, type) => {
+            statusIndicator.textContent = message;
+            statusIndicator.className = `status-indicator ${type}`;
+        };
+
+        function clearBoard() {
+            document.querySelectorAll('.nurse-team-select').forEach(s => { s.value = ''; s.title=''; });
+            document.querySelectorAll('div[contenteditable="true"]').forEach(d => d.textContent = '');
+            document.querySelectorAll('.hospitalized, .tag-chou, .tag-liang, .tag-b').forEach(el => el.classList.remove('hospitalized', 'tag-chou', 'tag-liang', 'tag-b'));
+            currentRecordId = null;
+            currentNamesData = {};
+            updateShiftPatientCount();
+            setStatus('新排程，尚未儲存', 'unsaved');
+        }
+
+        const updateShiftPatientCount = () => {
+            let earlyCount = 0;
+            let noonCount = 0;
+            let lateCount = 0;
+            document.querySelectorAll('.patient-name, .peripheral-patient-name').forEach(patientField => {
+                if (patientField.textContent.trim() !== '') {
+                    const parentRow = patientField.closest('.shift-row, .peripheral-shift-row');
+                    if (parentRow) {
+                        const shiftId = parentRow.dataset.shiftId;
+                        if (shiftId.includes('-早')) earlyCount++;
+                        else if (shiftId.includes('-午')) noonCount++;
+                        else if (shiftId.includes('-晚')) lateCount++;
+                    }
+                }
+            });
+            document.getElementById('early-shift-count').textContent = earlyCount;
+            document.getElementById('noon-shift-count').textContent = noonCount;
+            document.getElementById('late-shift-count').textContent = lateCount;
+        };
+
         const checkTagStatus = (tagElement) => {
             const parentRow = tagElement.closest('.shift-row, .peripheral-shift-row');
             if (!parentRow) return;
             const patientCell = parentRow.querySelector('.patient-name, .peripheral-patient-name');
             if (patientCell) {
-                const tagText = tagElement.textContent.toUpperCase(); // 轉換為大寫以方便比對
-                // 移除所有可能的顏色 class
+                const tagText = tagElement.textContent.toUpperCase();
                 patientCell.classList.remove('tag-chou', 'hospitalized', 'tag-liang', 'tag-b');
 
-                // 根據優先級 抽 > 住 > 兩 > B 進行判斷
                 if (tagText.includes('抽')) {
                     patientCell.classList.add('tag-chou');
                 } else if (tagText.includes('住')) {
@@ -171,10 +203,25 @@
                 }
             }
         };
+
+        const search = () => {
+            const searchTerm = document.getElementById('search-input').value.trim().toUpperCase();
+            document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight'));
+            if (!searchTerm) return;
+            document.querySelectorAll('.shift-row, .peripheral-shift-row').forEach(row => {
+                let textContent = '';
+                row.querySelectorAll('select, div[contenteditable="true"]').forEach(el => {
+                    textContent += (el.tagName === 'SELECT' ? (el.value ? el.options[el.selectedIndex].text : '') : el.textContent) + ' ';
+                });
+
+                if (textContent.toUpperCase().includes(searchTerm)) {
+                    row.classList.add('highlight');
+                }
+            });
+        };
         // --- CHANGE END ---
 
-        // ...其餘所有 JS 函式 (collectDataFromUI, loadDataFromCloud, saveDataToCloud, renderDataToUI, copySchedule, openStatsPage, updateNamesFromStats 等) 都保持不變...
-        // 為了完整性，將它們全部複製過來
+
         function collectDataFromUI() {
             const scheduleData = {};
             document.querySelectorAll('.shift-row, .peripheral-shift-row').forEach(row => {
@@ -197,6 +244,7 @@
             });
             return scheduleData;
         }
+        
         async function loadDataFromCloud(dateStr) {
             clearBoard();
             setStatus('讀取中...', 'loading');
@@ -219,30 +267,25 @@
                 setStatus('讀取失敗，請檢查網路連線', 'error');
             }
         }
+
         async function saveDataToCloud() {
             const scheduleData = collectDataFromUI();
             const dateStr = formatDate(currentDate);
-
             const dataToSave = {
                 date: dateStr,
                 schedule: scheduleData,
                 names: currentNamesData
             };
-
             setStatus('儲存中...', 'loading');
-
             try {
                 const method = currentRecordId ? 'PUT' : 'POST';
                 const url = currentRecordId ? `${API_BASE_URL}/${currentRecordId}` : API_BASE_URL;
-
                 const response = await fetch(url, {
                     method: method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(dataToSave)
                 });
-
                 if (!response.ok) throw new Error(`HTTP 錯誤! 狀態: ${response.status}`);
-                
                 const savedRecord = await response.json();
                 currentRecordId = savedRecord.id;
                 setStatus(`資料已於 ${new Date().toLocaleTimeString()} 儲存成功`, 'saved');
@@ -251,6 +294,7 @@
                 setStatus('儲存失敗，請稍後再試', 'error');
             }
         }
+
         function renderDataToUI(scheduleData) {
             Object.keys(scheduleData).forEach(id => { 
                 const row = document.querySelector(`[data-shift-id="${id}"]`); 
@@ -270,14 +314,18 @@
                     row.querySelector('.peripheral-patient-name').textContent = data.patient || ''; 
                 } 
             }); 
-            
-            document.querySelectorAll('.patient-tag').forEach(checkTagStatus); // 渲染後觸發一次顏色檢查
+            document.querySelectorAll('.patient-tag').forEach(checkTagStatus);
             updateShiftPatientCount();
         }
+
         async function copySchedule() {
             const sourceDateStr = document.getElementById('copy-source-date').value;
             if (!sourceDateStr) {
                 alert("請選擇一個來源日期！");
+                return;
+            }
+            if (sourceDateStr === formatDate(currentDate)) {
+                alert("來源日期與目前日期相同，無需複製。");
                 return;
             }
             if (!confirm(`確定要將 ${sourceDateStr} 的排程複製到 ${formatDate(currentDate)} 嗎？\n這會覆蓋當前畫面的所有內容！`)) return;
@@ -287,7 +335,6 @@
                 const response = await fetch(`${API_BASE_URL}?date=${sourceDateStr}`);
                 if (!response.ok) throw new Error(`找不到來源日期的資料`);
                 const data = await response.json();
-
                 if (data.length > 0) {
                     const sourceData = data[0];
                     clearBoard();
@@ -303,6 +350,7 @@
                 setStatus('複製失敗', 'error');
             }
         }
+        
         function openStatsPage() {
             window.currentScheduleDataForStats = {
                 date: formatDate(currentDate),
@@ -311,14 +359,15 @@
             };
             window.open('stats.html', '_blank');
         }
+
         window.updateNamesFromStats = function(newNames) {
             currentNamesData = newNames;
             setStatus('姓名資料已更新，請儲存', 'unsaved');
             alert('護理師姓名資料已從統計頁面同步回來，請點擊「儲存資料至雲端」以保存變更。');
-        };
+        }
+        
         const printSchedule = () => window.print();
-        const search = () => { /* ... */ };
-        const updateShiftPatientCount = () => { /* ... */ };
+
         function changeDate(days) {
             currentDate.setDate(currentDate.getDate() + days);
             updateDateDisplay();
@@ -336,8 +385,6 @@
         document.getElementById('clear-all-btn').addEventListener('click', () => { if(confirm('確定要清除畫面上的所有資料嗎？(此操作不會影響雲端儲存的資料)')) { clearBoard(); } });
         document.getElementById('copy-schedule-btn').addEventListener('click', copySchedule);
         
-        // --- CHANGE: 觸發顏色檢查的事件 ---
-        // 當使用者在任何 contenteditable 區域輸入時，都檢查其對應的 tag
         document.addEventListener('input', (e) => {
             setStatus('內容已變更，尚未儲存', 'unsaved');
             if (e.target.classList.contains('patient-tag')) {
