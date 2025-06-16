@@ -3,16 +3,71 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>洗腎室床位病人排程表 (V23.0 - 重複排班驗證版)</title>
+    <title>洗腎室床位病人排程表 (V23.1 - 平台整合版)</title>
     <style>
-        /* CSS 與 V22.9 完全相同 */
+        /* CSS 與 V23.0 完全相同 */
         body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .controls-panel { max-width: 1800px; margin: 0 auto 20px; padding: 15px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
         .controls-panel button { padding: 8px 15px; font-size: 1em; border-radius: 5px; border: 1px solid #ccc; background-color: #e9e9e9; cursor: pointer; transition: background-color 0.2s; }
         #save-btn { background-color: #4CAF50; color: white; border-color: #4CAF50;}
-        /* ... 其他 CSS ... */
+        #print-btn { background-color: #008CBA; color: white; border-color: #008CBA;}
+        #open-stats-btn { background-color: #f44336; color: white; border-color: #f44336;}
+        #clear-all-btn { background-color: #6c757d; color: white; border-color: #6c757d;}
+        #copy-schedule-btn { background-color: #ff9800; color: white; border-color: #ff9800;}
+        .search-group { display: flex; align-items: center; gap: 5px; }
+        #search-input, #copy-source-date { padding: 8px; border: 1px solid #ccc; border-radius: 5px; }
+        .status-indicator { font-weight: bold; margin-left: auto; }
+        .status-indicator.loading { color: #ff9800; }
+        .status-indicator.saved { color: #4CAF50; }
+        .status-indicator.error { color: #f44336; }
+        .status-indicator.unsaved { color: #757575; }
+        .shift-patient-count { border-left: 2px solid #ccc; padding-left: 15px; display: flex; gap: 15px; font-size: 1.1em; font-weight: bold; }
+        .shift-patient-count span { color: #005a9c; }
+        .date-navigator { display: flex; align-items: center; gap: 10px; margin: 0 auto; }
+        #current-date-display { font-size: 1.5em; font-weight: bold; color: #333; }
+        .date-nav-btn { font-size: 1.5em; padding: 0 10px; }
+        .dialysis-unit { max-width: 1800px; margin: 0 auto; display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; }
+        .aisle { writing-mode: vertical-lr; text-align: center; padding: 20px; background-color: #dcdcdc; border-radius: 8px; font-size: 1.5em; letter-spacing: 0.5em; display: flex; align-items: center; justify-content: center; }
+        .left-wing, .right-wing { display: flex; flex-direction: column; gap: 10px; }
+        .bed-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .bed, .nursing-station, .peripheral-bed { border: 1px solid #ccc; border-radius: 5px; overflow: hidden; }
+        .bed { min-height: 160px; }
+        .bed.placeholder { visibility: hidden; }
+        .nursing-station { background-color: #f0f4c3; border: 2px dashed #afb42b; display: flex; align-items: center; justify-content: center; font-size: 1.5em; font-weight: bold; color: #558b2f; grid-column: span 3; }
+        .bed-header, .peripheral-header { background-color: #e3f2fd; color: #0d47a1; font-weight: bold; padding: 5px; text-align: center; font-size: 1em; }
+        .shift-row { display: grid; grid-template-columns: 28px 70px 1fr 40px; align-items: stretch; border-top: 1px solid #e0e0e0; }
+        .peripheral-shift-row { display: grid; grid-template-columns: 28px 70px 70px 1fr 40px; border-top: 1px solid #f8bbd0; align-items: stretch; }
+        .shift-label { background-color: #f5f5f5; font-size: 0.8em; font-weight: bold; display: flex; align-items: center; justify-content: center; border-right: 1px solid #e0e0e0; }
+        .nurse-team-select { padding: 4px; border: none; font-size: 0.8em; width: 100%; background: transparent; border-radius: 0; appearance: none; -webkit-appearance: none; -moz-appearance: none; text-align: center; }
+        .shift-row > .nurse-team-select, .peripheral-shift-row > .nurse-team-select { border-right: 1px solid #e0e0e0; }
+        .patient-name:empty::before { content: "輸入病人"; color: #aaa; font-style: italic; }
+        .shift-row.split-shift { grid-template-columns: 28px 70px 1fr 40px; }
+        .nurse-split-column { display: flex; flex-direction: column; border-right: 1px solid #e0e0e0; }
+        .nurse-split-column .nurse-team-select { flex-grow: 1; }
+        .nurse-split-column .nurse-team-select:first-child { border-bottom: 1px solid #e0e0e0; }
+        .split-shift .patient-name { display: flex; align-items: center; justify-content: center; }
+        .bed.aisle-side.right-wing-bed { border-left: 5px solid #4CAF50; }
+        .bed.aisle-side.left-wing-bed { border-right: 5px solid #4CAF50; }
         .bed.hepatitis .bed-header { background-color: #fffde7; color: #af8203; }
         .bed.hepatitis { border-color: #fffde7; }
+        .bed.unassigned { background-color: #eeeeee; }
+        .bed.unassigned .bed-header { background-color: #bdbdbd; color: #424242; }
+        .bed.unassigned .shift-row { display: none; }
+        .highlight { background-color: #fff176 !important; }
+        .extra-sections { max-width: 1800px; margin: 30px auto 0; }
+        .peripheral-section { padding: 15px; background-color: #fff; border-radius: 8px; margin-bottom: 20px; }
+        .peripheral-section h2 { text-align: center; margin-top: 0; }
+        .peripheral-bed-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 10px; }
+        .peripheral-bed .peripheral-header { background-color: #fce4ec; border-color: #f48fb1; color: #c2185b; }
+        .peripheral-shift-row > * { border-right: 1px solid #f8bbd0; }
+        .peripheral-shift-row > *:last-child { border-right: none; }
+        .peripheral-bed-number, .peripheral-patient-name, .patient-name, .patient-tag { padding: 4px; border: none; font-size: 0.9em; text-align: center; overflow-wrap: break-word; }
+        .peripheral-bed-number:empty::before { content: "床號"; color: #aaa; font-style: italic; }
+        .peripheral-patient-name:empty::before { content: "病人名"; color: #aaa; font-style: italic; }
+        .patient-tag { border-left: 1px solid #e0e0e0; font-size: 0.8em; }
+        .patient-tag:empty::before { content: "備註"; color: #aaa; font-style: italic; }
+        .patient-name:empty, .peripheral-patient-name:empty { background-color: #dcdcdc; }
+        .nurse-team-select:has(option[value=""]:checked) { background-color: #dcdcdc !important; }
         .patient-name.tag-chou, .peripheral-patient-name.tag-chou { background-color: #90caf9 !important; }
         .patient-name.hospitalized, .peripheral-patient-name.hospitalized { background-color: #ffcdd2 !important; }
         .patient-name.tag-huan, .peripheral-patient-name.tag-huan { background-color: #e3f2fd !important; }
@@ -20,12 +75,30 @@
         .patient-name.tag-b, .peripheral-patient-name.tag-b { background-color: #fffde7 !important; }
         @page { size: A4 landscape; margin: 0.5cm; }
         @media print {
-            /* ... Print CSS 與 V22.8 完全相同 ... */
+            body { padding: 0; background-color: #fff; font-size: 8pt; -webkit-print-color-adjust: exact; color-adjust: exact; }
+            .controls-panel, .aisle, .status-indicator, #open-stats-btn, #print-btn, #save-btn, #clear-all-btn, #copy-schedule-btn, #copy-source-date, .search-group, #today-btn, .date-nav-btn { display: none !important; }
+            .date-navigator { display: flex; justify-content: space-between; align-items: center; width: 100%; margin: 0 0 5px 0; padding-bottom: 5px; border-bottom: 2px solid #000; }
+            #current-date-display { font-size: 1.5em; text-align: left; flex-grow: 1; }
+            .shift-patient-count { display: flex !important; border-left: none; padding-left: 0; font-size: 1.1em; gap: 20px; flex-shrink: 0; }
+            .dialysis-unit, .extra-sections { max-width: 100%; box-shadow: none; gap: 10px; }
+            .dialysis-unit { grid-template-columns: 1fr 1fr; }
+            .bed, .nursing-station, .peripheral-bed { border: 1px solid #000; box-shadow: none; page-break-inside: avoid; border-radius: 3px; }
+            .bed-row, .peripheral-bed-container { gap: 5px; }
+            .bed { min-height: 120px; }
+            .shift-row, .peripheral-shift-row { font-size: 1em; min-height: 25px; align-items: center; }
+            .shift-row { grid-template-columns: 20px 55px 1fr 30px; }
+            .peripheral-shift-row { display: grid; grid-template-columns: 20px 55px 55px 1fr 30px; }
+            .shift-label, .nurse-team-select, .patient-name, .peripheral-patient-name, .peripheral-bed-number, .patient-tag, .nurse-split-column { display: flex; align-items: center; justify-content: center; height: 100%; }
+            .nurse-split-column { flex-direction: column; }
+            .nurse-split-column .nurse-team-select { width: 100%; flex-grow: 1; }
+            .patient-name:empty::before, .peripheral-bed-number:empty::before, .peripheral-patient-name:empty::before, .patient-tag:empty::before { content: ""; }
+            select, .nurse-team-select:has(option[value=""]:checked) { -webkit-appearance: none; -moz-appearance: none; appearance: none; border: none; background: transparent !important; }
+            .patient-name.hospitalized, .peripheral-patient-name.hospitalized, .patient-name.tag-b, .peripheral-patient-name.tag-b, .patient-name.tag-chou, .peripheral-patient-name.tag-chou, .patient-name.tag-liang, .peripheral-patient-name.tag-liang, .patient-name.tag-huan, .peripheral-patient-name.tag-huan { background-color: inherit !important; border: 1px dotted #888; }
+            .bed.hepatitis .bed-header { border-bottom: 2px double #000; background-color: #fff !important; }
         }
     </style>
 </head>
 <body>
-    <!-- HTML Body 結構無變更 -->
     <div class="date-navigator">
         <button id="prev-date-btn" class="date-nav-btn"><</button>
         <h1 id="current-date-display"></h1>
@@ -68,8 +141,9 @@
     </div>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // ... 所有變數和函式與 V23.0 相同，除了 openStatsPage ...
+
         const API_BASE_URL = 'https://684eb206f0c9c9848d28d637.mockapi.io/schedules';
-        // ... 其他變數和佈局生成函數與 V22.9 相同 ...
         let currentDate = new Date();
         let currentRecordId = null;
         let currentNamesData = {};
@@ -97,92 +171,48 @@
         function clearBoard() { document.querySelectorAll('.nurse-team-select').forEach(s => { s.value = ''; s.title=''; }); document.querySelectorAll('div[contenteditable="true"]').forEach(d => d.textContent = ''); document.querySelectorAll('.hospitalized, .tag-chou, .tag-liang, .tag-b, .tag-huan').forEach(el => el.classList.remove('hospitalized', 'tag-chou', 'tag-liang', 'tag-b', 'tag-huan')); currentRecordId = null; currentNamesData = {}; updateShiftPatientCount(); setStatus('新排程，尚未儲存', 'unsaved'); }
         const updateShiftPatientCount = () => { let earlyCount = 0; let noonCount = 0; let lateCount = 0; document.querySelectorAll('.patient-name, .peripheral-patient-name').forEach(patientField => { if (patientField.textContent.trim() !== '') { const parentRow = patientField.closest('.shift-row, .peripheral-shift-row'); if (parentRow) { const shiftId = parentRow.dataset.shiftId; if (shiftId.includes('-早')) earlyCount++; else if (shiftId.includes('-午')) noonCount++; else if (shiftId.includes('-晚')) lateCount++; } } }); document.querySelectorAll('#early-shift-count').forEach(el => el.textContent = earlyCount); document.querySelectorAll('#noon-shift-count').forEach(el => el.textContent = noonCount); document.querySelectorAll('#late-shift-count').forEach(el => el.textContent = lateCount); };
         const checkTagStatus = (tagElement) => { const parentRow = tagElement.closest('.shift-row, .peripheral-shift-row'); if (!parentRow) return; const patientCell = parentRow.querySelector('.patient-name, .peripheral-patient-name'); if (patientCell) { const tagText = tagElement.textContent.toUpperCase(); patientCell.classList.remove('tag-chou', 'hospitalized', 'tag-huan', 'tag-liang', 'tag-b'); if (tagText.includes('抽')) { patientCell.classList.add('tag-chou'); } else if (tagText.includes('住')) { patientCell.classList.add('hospitalized'); } else if (tagText.includes('換')) { patientCell.classList.add('tag-huan'); } else if (tagText.includes('兩')) { patientCell.classList.add('tag-liang'); } else if (tagText.includes('B')) { patientCell.classList.add('tag-b'); } } };
-        const search = () => { /* ... */ };
-        function collectDataFromUI() { /* ... */ }
-        async function loadDataFromCloud(dateStr) { /* ... */ }
-        function renderDataToUI(scheduleData) { /* ... */ }
-        async function copySchedule() { /* ... */ }
-        function openStatsPage() { /* ... */ }
-        const printSchedule = () => window.print();
-        function changeDate(days) { currentDate.setDate(currentDate.getDate() + days); updateDateDisplay(); loadDataFromCloud(formatDate(currentDate)); }
+        const search = () => { const searchTerm = document.getElementById('search-input').value.trim().toUpperCase(); document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight')); if (!searchTerm) return; document.querySelectorAll('.shift-row, .peripheral-shift-row').forEach(row => { let textContent = ''; row.querySelectorAll('select, div[contenteditable="true"]').forEach(el => { textContent += (el.tagName === 'SELECT' ? (el.value ? el.options[el.selectedIndex].text : '') : el.textContent) + ' '; }); if (textContent.toUpperCase().includes(searchTerm)) { row.classList.add('highlight'); } }); };
+        function collectDataFromUI() { const scheduleData = {}; document.querySelectorAll('.shift-row, .peripheral-shift-row').forEach(row => { const id = row.dataset.shiftId; let data = {}; const tag = row.querySelector('.patient-tag')?.textContent || ''; if (row.classList.contains('split-shift')) { const nurseIn = row.querySelector('.nurse-in').value; let nurseOut = row.querySelector('.nurse-out').value; if (nurseIn && !nurseOut) { nurseOut = nurseIn; } data = { nurse_in: nurseIn, nurse_out: nurseOut, patient: row.querySelector('.patient-name').textContent, tag }; } else if (row.classList.contains('shift-row')) { data = { nurse: row.querySelector('.nurse-team-select').value, patient: row.querySelector('.patient-name').textContent, tag }; } else { data = { nurse: row.querySelector('.nurse-team-select').value, bedNumber: row.querySelector('.peripheral-bed-number').textContent, patient: row.querySelector('.peripheral-patient-name').textContent, tag }; } if (Object.values(data).some(val => val && val.trim() !== '')) { scheduleData[id] = data; } }); return scheduleData; }
+        async function loadDataFromCloud(dateStr) { clearBoard(); setStatus('讀取中...', 'loading'); try { const response = await fetch(`${API_BASE_URL}?date=${dateStr}`); if (!response.ok) throw new Error(`HTTP 錯誤! 狀態: ${response.status}`); const data = await response.json(); if (data.length > 0) { const record = data[0]; currentRecordId = record.id; currentNamesData = record.names || {}; renderDataToUI(record.schedule); setStatus('資料已從雲端載入', 'saved'); } else { setStatus('本日無雲端資料，可建立新排程', 'unsaved'); } } catch (error) { console.error('從雲端讀取資料失敗:', error); setStatus('讀取失敗，請檢查網路連線', 'error'); } }
+        function renderDataToUI(scheduleData) { Object.keys(scheduleData).forEach(id => { const row = document.querySelector(`[data-shift-id="${id}"]`); if (!row) return; const data = scheduleData[id]; const tagEl = row.querySelector('.patient-tag'); if(tagEl) tagEl.textContent = data.tag || ''; if (row.classList.contains('split-shift')) { row.querySelector('.nurse-in').value = data.nurse_in || ''; row.querySelector('.nurse-out').value = data.nurse_out || ''; row.querySelector('.patient-name').textContent = data.patient || ''; } else if (row.classList.contains('shift-row')) { row.querySelector('.nurse-team-select').value = data.nurse || ''; row.querySelector('.patient-name').textContent = data.patient || ''; } else if (row.classList.contains('peripheral-shift-row')) { row.querySelector('.nurse-team-select').value = data.nurse || ''; row.querySelector('.peripheral-bed-number').textContent = data.bedNumber || ''; row.querySelector('.peripheral-patient-name').textContent = data.patient || ''; } }); document.querySelectorAll('.patient-tag').forEach(checkTagStatus); updateShiftPatientCount(); }
+        async function copySchedule() { const sourceDateStr = document.getElementById('copy-source-date').value; if (!sourceDateStr) { alert("請選擇一個來源日期！"); return; } if (sourceDateStr === formatDate(currentDate)) { alert("來源日期與目前日期相同，無需複製。"); return; } if (!confirm(`確定要將 ${sourceDateStr} 的排程複製到 ${formatDate(currentDate)} 嗎？\n這會覆蓋當前畫面的所有內容！`)) return; setStatus(`從 ${sourceDateStr} 複製中...`, 'loading'); try { const response = await fetch(`${API_BASE_URL}?date=${sourceDateStr}`); if (!response.ok) throw new Error(`找不到來源日期的資料`); const data = await response.json(); if (data.length > 0) { const sourceData = data[0]; clearBoard(); currentNamesData = sourceData.names || {}; renderDataToUI(sourceData.schedule); setStatus('複製成功，請記得儲存', 'unsaved'); } else { alert(`在雲端找不到 ${sourceDateStr} 的排程資料。`); setStatus('複製失敗', 'error'); } } catch (error) { alert(`複製失敗: ${error.message}`); setStatus('複製失敗', 'error'); } }
+        
+        function validateNoDuplicatePatients() { const patientNames = new Set(); const patientElements = document.querySelectorAll('.patient-name, .peripheral-patient-name'); for (const el of patientElements) { const name = el.textContent.trim(); if (name === '') continue; if (patientNames.has(name)) { return { duplicate: true, name: name }; } patientNames.add(name); } return { duplicate: false }; }
+        async function saveDataToCloud() { const validationResult = validateNoDuplicatePatients(); if (validationResult.duplicate) { alert(`儲存失敗：病人 "${validationResult.name}" 在今日排程中重複出現！`); setStatus('儲存失敗，發現重複排班', 'error'); return; } const scheduleData = collectDataFromUI(); const dateStr = formatDate(currentDate); const dataToSave = { date: dateStr, schedule: scheduleData, names: currentNamesData }; setStatus('儲存中...', 'loading'); try { const method = currentRecordId ? 'PUT' : 'POST'; const url = currentRecordId ? `${API_BASE_URL}/${currentRecordId}` : API_BASE_URL; const response = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToSave) }); if (!response.ok) throw new Error(`HTTP 錯誤! 狀態: ${response.status}`); const savedRecord = await response.json(); currentRecordId = savedRecord.id; setStatus(`資料已於 ${new Date().toLocaleTimeString()} 儲存成功`, 'saved'); } catch (error) { console.error('儲存至雲端失敗:', error); setStatus('儲存失敗，請稍後再試', 'error'); } }
 
-        // --- CHANGE START: 新增重複驗證函式，並修改儲存函式 ---
-        function validateNoDuplicatePatients() {
-            const patientNames = new Set();
-            const patientElements = document.querySelectorAll('.patient-name, .peripheral-patient-name');
-            
-            for (const el of patientElements) {
-                const name = el.textContent.trim();
-                if (name === '') {
-                    continue; // 跳過空欄位
-                }
-                if (patientNames.has(name)) {
-                    // 找到重複，回傳重複的姓名以供提示
-                    return { duplicate: true, name: name };
-                }
-                patientNames.add(name);
-            }
-            // 沒有重複
-            return { duplicate: false };
-        }
-
-        async function saveDataToCloud() {
-            // 步驟1: 執行驗證
-            const validationResult = validateNoDuplicatePatients();
-            if (validationResult.duplicate) {
-                alert(`儲存失敗：病人 "${validationResult.name}" 在今日排程中重複出現！`);
-                setStatus('儲存失敗，發現重複排班', 'error');
-                return; // 中止儲存
-            }
-            
-            // 步驟2: (驗證通過) 執行原有儲存邏輯
-            const scheduleData = collectDataFromUI();
+        // --- CHANGE START: 修改 openStatsPage 函式以與主框架溝通 ---
+        function openStatsPage() {
             const dateStr = formatDate(currentDate);
-            const dataToSave = { date: dateStr, schedule: scheduleData, names: currentNamesData };
-            
-            setStatus('儲存中...', 'loading');
-            try {
-                const method = currentRecordId ? 'PUT' : 'POST';
-                const url = currentRecordId ? `${API_BASE_URL}/${currentRecordId}` : API_BASE_URL;
-                const response = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToSave) });
-                if (!response.ok) throw new Error(`HTTP 錯誤! 狀態: ${response.status}`);
-                const savedRecord = await response.json();
-                currentRecordId = savedRecord.id;
-                setStatus(`資料已於 ${new Date().toLocaleTimeString()} 儲存成功`, 'saved');
-            } catch (error) {
-                console.error('儲存至雲端失敗:', error);
-                setStatus('儲存失敗，請稍後再試', 'error');
+            if (window.parent && window.parent.navigateTo) {
+                // 如果在 iframe 中，呼叫父層的函式
+                window.parent.navigateTo(`stats.html?date=${dateStr}`);
+            } else {
+                // 如果是獨立打開，則維持原來的行為
+                window.open(`stats.html?date=${dateStr}`, '_blank');
             }
         }
         // --- CHANGE END ---
 
-        // --- 事件綁定 ---
+        const printSchedule = () => window.print();
+        function changeDate(days) { currentDate.setDate(currentDate.getDate() + days); updateDateDisplay(); loadDataFromCloud(formatDate(currentDate)); }
+        
         document.getElementById('prev-date-btn').addEventListener('click', () => changeDate(-1));
         document.getElementById('next-date-btn').addEventListener('click', () => changeDate(1));
         document.getElementById('today-btn').addEventListener('click', () => { currentDate = new Date(); updateDateDisplay(); loadDataFromCloud(formatDate(currentDate)); });
-        document.getElementById('save-btn').addEventListener('click', saveDataToCloud); // 按鈕仍綁定 saveDataToCloud，但函式內部邏輯已更新
+        document.getElementById('save-btn').addEventListener('click', saveDataToCloud);
         document.getElementById('print-btn').addEventListener('click', printSchedule);
         document.getElementById('search-btn').addEventListener('click', search);
         document.getElementById('open-stats-btn').addEventListener('click', openStatsPage);
         document.getElementById('clear-all-btn').addEventListener('click', () => { if(confirm('確定要清除畫面上的所有資料嗎？(此操作不會影響雲端儲存的資料)')) { clearBoard(); } });
         document.getElementById('copy-schedule-btn').addEventListener('click', copySchedule);
         document.addEventListener('input', (e) => { setStatus('內容已變更，尚未儲存', 'unsaved'); if (e.target.classList.contains('patient-tag')) { checkTagStatus(e.target); } });
-
-        // --- 初始化 ---
+        
         generateWingLayout(leftWing, layoutData.leftWingRows, 'left-wing-bed');
         generateWingLayout(rightWing, layoutData.rightWingRows, 'right-wing-bed');
         const nursingStationRow = document.createElement('div'); nursingStationRow.className = 'bed-row'; nursingStationRow.innerHTML = '<div class="nursing-station">護理站</div>'; leftWing.appendChild(nursingStationRow);
         for (let i = 1; i <= peripheralBedCount; i++) { peripheralContainer.appendChild(createPeripheralBedElement(i)); }
         updateDateDisplay();
         loadDataFromCloud(formatDate(currentDate));
-
-        // --- 為了程式碼完整性，複製貼上其他未變動的函式 ---
-        collectDataFromUI = () => { const scheduleData = {}; document.querySelectorAll('.shift-row, .peripheral-shift-row').forEach(row => { const id = row.dataset.shiftId; let data = {}; const tag = row.querySelector('.patient-tag')?.textContent || ''; if (row.classList.contains('split-shift')) { const nurseIn = row.querySelector('.nurse-in').value; let nurseOut = row.querySelector('.nurse-out').value; if (nurseIn && !nurseOut) { nurseOut = nurseIn; } data = { nurse_in: nurseIn, nurse_out: nurseOut, patient: row.querySelector('.patient-name').textContent, tag }; } else if (row.classList.contains('shift-row')) { data = { nurse: row.querySelector('.nurse-team-select').value, patient: row.querySelector('.patient-name').textContent, tag }; } else { data = { nurse: row.querySelector('.nurse-team-select').value, bedNumber: row.querySelector('.peripheral-bed-number').textContent, patient: row.querySelector('.peripheral-patient-name').textContent, tag }; } if (Object.values(data).some(val => val && val.trim() !== '')) { scheduleData[id] = data; } }); return scheduleData; }
-        loadDataFromCloud = async (dateStr) => { clearBoard(); setStatus('讀取中...', 'loading'); try { const response = await fetch(`${API_BASE_URL}?date=${dateStr}`); if (!response.ok) throw new Error(`HTTP 錯誤! 狀態: ${response.status}`); const data = await response.json(); if (data.length > 0) { const record = data[0]; currentRecordId = record.id; currentNamesData = record.names || {}; renderDataToUI(record.schedule); setStatus('資料已從雲端載入', 'saved'); } else { setStatus('本日無雲端資料，可建立新排程', 'unsaved'); } } catch (error) { console.error('從雲端讀取資料失敗:', error); setStatus('讀取失敗，請檢查網路連線', 'error'); } }
-        renderDataToUI = (scheduleData) => { Object.keys(scheduleData).forEach(id => { const row = document.querySelector(`[data-shift-id="${id}"]`); if (!row) return; const data = scheduleData[id]; const tagEl = row.querySelector('.patient-tag'); if(tagEl) tagEl.textContent = data.tag || ''; if (row.classList.contains('split-shift')) { row.querySelector('.nurse-in').value = data.nurse_in || ''; row.querySelector('.nurse-out').value = data.nurse_out || ''; row.querySelector('.patient-name').textContent = data.patient || ''; } else if (row.classList.contains('shift-row')) { row.querySelector('.nurse-team-select').value = data.nurse || ''; row.querySelector('.patient-name').textContent = data.patient || ''; } else if (row.classList.contains('peripheral-shift-row')) { row.querySelector('.nurse-team-select').value = data.nurse || ''; row.querySelector('.peripheral-bed-number').textContent = data.bedNumber || ''; row.querySelector('.peripheral-patient-name').textContent = data.patient || ''; } }); document.querySelectorAll('.patient-tag').forEach(checkTagStatus); updateShiftPatientCount(); }
-        copySchedule = async () => { const sourceDateStr = document.getElementById('copy-source-date').value; if (!sourceDateStr) { alert("請選擇一個來源日期！"); return; } if (sourceDateStr === formatDate(currentDate)) { alert("來源日期與目前日期相同，無需複製。"); return; } if (!confirm(`確定要將 ${sourceDateStr} 的排程複製到 ${formatDate(currentDate)} 嗎？\n這會覆蓋當前畫面的所有內容！`)) return; setStatus(`從 ${sourceDateStr} 複製中...`, 'loading'); try { const response = await fetch(`${API_BASE_URL}?date=${sourceDateStr}`); if (!response.ok) throw new Error(`找不到來源日期的資料`); const data = await response.json(); if (data.length > 0) { const sourceData = data[0]; clearBoard(); currentNamesData = sourceData.names || {}; renderDataToUI(sourceData.schedule); setStatus('複製成功，請記得儲存', 'unsaved'); } else { alert(`在雲端找不到 ${sourceDateStr} 的排程資料。`); setStatus('複製失敗', 'error'); } } catch (error) { alert(`複製失敗: ${error.message}`); setStatus('複製失敗', 'error'); } }
-        openStatsPage = () => { const dateStr = formatDate(currentDate); window.open(`stats.html?date=${dateStr}`, '_blank'); }
-        search = () => { const searchTerm = document.getElementById('search-input').value.trim().toUpperCase(); document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight')); if (!searchTerm) return; document.querySelectorAll('.shift-row, .peripheral-shift-row').forEach(row => { let textContent = ''; row.querySelectorAll('select, div[contenteditable="true"]').forEach(el => { textContent += (el.tagName === 'SELECT' ? (el.value ? el.options[el.selectedIndex].text : '') : el.textContent) + ' '; }); if (textContent.toUpperCase().includes(searchTerm)) { row.classList.add('highlight'); } }); };
     });
     </script>
 </body>
