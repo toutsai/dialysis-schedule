@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>透析病人管理系統 (V1.8 - 最終修復版)</title>
+    <title>透析病人管理系統 (V1.9 - 最終穩定版)</title>
     <style>
-        /* ... CSS 與 V1.6/V1.7 完全相同 ... */
+        /* CSS 與 V1.6/V1.7/V1.8 完全相同 */
         :root { --green-bg: #e8f5e9; --green-text: #2e7d32; --blue-bg: #e3f2fd;  --blue-text: #1565c0; --orange-bg: #fff3e0; --orange-text: #ef6c00; --grey-bg: #f5f5f5; --grey-text: #616161; --red-text: #c62828; }
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f9f9f9; margin: 0; padding: 20px; }
         .container { max-width: 1400px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -21,7 +21,7 @@
         .stats-area { display: flex; gap: 20px; font-size: 0.9em; }
         .patient-table { width: 100%; border-collapse: collapse; table-layout: auto; }
         .patient-table th, .patient-table td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap; }
-        .patient-table td:nth-child(1), .patient-table#ipd-table-body td:nth-child(8), .patient-table#opd-table-body td:nth-child(7) { white-space: normal; }
+        .patient-table td:nth-child(1), .patient-table #ipd-table-body td:nth-child(8), .patient-table #opd-table-body td:nth-child(7) { white-space: normal; }
         .patient-table th { background-color: #f2f2f2; cursor: pointer; user-select: none; position: sticky; top: 0; }
         .patient-table th:hover { background-color: #e8e8e8; }
         .patient-table th .sort-indicator { display: inline-block; margin-left: 5px; color: #999; }
@@ -150,13 +150,12 @@
         }
         
         const handleSort = (key) => { if (currentSort.column === key) { currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc'; } else { currentSort.column = key; currentSort.order = 'asc'; } renderAllTables(); };
-        const updateStats = () => { /* ...與V1.6相同... */ };
-        const getRowClass = (p) => { /* ...與V1.6相同... */ };
-        const generateDiseaseTags = (d) => { /* ...與V1.6相同... */ };
-        const sortPatients = (p) => { /* ...與V1.6相同... */ };
-        const openModal = (type, patient = null) => { /* ...與V1.6相同... */ };
-        const closeModal = () => { /* ...與V1.6相同... */ };
-
+        const updateStats = () => {const ipdPatients = allPatients.filter(p => p.status === 'ipd' && !p.isDeleted);const opdPatients = allPatients.filter(p => p.status === 'opd' && !p.isDeleted);const ipdStatsDiv = document.getElementById('ipd-stats');const opdStatsDiv = document.getElementById('opd-stats');const generateStatsHTML = (patients) => {if (patients.length === 0) return '總人數: 0';const freqCounts = patients.reduce((acc, p) => {acc[p.frequency] = (acc[p.frequency] || 0) + 1;return acc;}, {});const freqString = Object.entries(freqCounts).map(([freq, count]) => `${freq || '未分類'}: ${count}人`).join(', ');return `總人數: ${patients.length} (${freqString})`;};ipdStatsDiv.innerHTML = generateStatsHTML(ipdPatients);opdStatsDiv.innerHTML = generateStatsHTML(opdPatients);};
+        const getRowClass = (p) => {if (p.status === 'deleted') return 'status-deleted';const biweeklyFreq = ['一四', '二五', '三六', '一五', '二六'];if (biweeklyFreq.includes(p.frequency)) return 'status-biweekly';if (p.status === 'ipd') return 'status-ipd';if (p.status === 'opd') return 'status-opd';return '';};
+        const generateDiseaseTags = (d) => {if (!d || d.length === 0) return '';return d.map(tag => `<span class="disease-tag">${tag}</span>`).join('');};
+        const sortPatients = (p) => {p.sort((a, b) => {const valA = a[currentSort.column] || '';const valB = b[currentSort.column] || '';const compare = String(valA).localeCompare(String(valB), 'zh-Hant');return currentSort.order === 'asc' ? compare : -compare;});};
+        const openModal = (type, patient = null) => {const templateId = type === 'ipd' ? 'ipd-form-template' : 'opd-form-template';const template = document.getElementById(templateId);modalFormContent.innerHTML = '';modalFormContent.appendChild(template.content.cloneNode(true));const form = modalFormContent.querySelector('form');const populateSelect = (selectId, options) => {const select = form.querySelector(`#${selectId}`);if (select) select.innerHTML = '<option value="">請選擇</option>' + options.map(o => `<option value="${o}">${o}</option>`).join('');};populateSelect('physician', PHYSICIANS);populateSelect('frequency', FREQUENCIES);populateSelect('mode', MODES);populateSelect('vasc-access', VASC_ACCESSES);const diseaseContainer = form.querySelector('#disease-checkboxes');if(diseaseContainer) {diseaseContainer.innerHTML = DISEASES.map(d => `<div class="checkbox-group"><input type="checkbox" id="disease-${d}" name="disease" value="${d}"><label for="disease-${d}">${d}</label></div>`).join('');}modalTitle.textContent = patient ? `編輯${type === 'ipd' ? '住院' : '門診'}病人` : `新增${type === 'ipd' ? '住院' : '門診'}病人`;if (patient) {form.querySelector('#patient-id').value = patient.id;form.querySelector('#name').value = patient.name || '';form.querySelector('#medical-record-number').value = patient.medicalRecordNumber || '';form.querySelector('#physician').value = patient.physician || '';form.querySelector('#frequency').value = patient.frequency || '';form.querySelector('#mode').value = patient.mode || '';form.querySelector('#remarks').value = patient.remarks || '';form.querySelectorAll('input[name="disease"]').forEach(cb => {cb.checked = patient.diseases && patient.diseases.includes(cb.value);});if (type === 'ipd') {form.querySelector('#is-first-dialysis').checked = patient.isFirstDialysis || false;form.querySelector('#is-discontinued').checked = patient.isDiscontinued || false;} else {form.querySelector('#first-dialysis-date').value = patient.firstDialysisDate || '';form.querySelector('#access-creation-date').value = patient.accessCreationDate || '';form.querySelector('#vasc-access').value = patient.vascAccess || '';}}form.addEventListener('submit', handleFormSubmit);modal.style.display = 'flex';};
+        const closeModal = () => {modal.style.display = 'none';modalFormContent.innerHTML = '';};
         const handleFormSubmit = async (e) => {
             e.preventDefault();
             const form = e.target;
@@ -177,25 +176,27 @@
                 renderAllTables();
             } catch (error) { console.error("Save failed:", error); alert("儲存失敗！"); }
         };
-
         const updatePatientField = async (id, dataToUpdate) => {
             const patient = allPatients.find(p => p.id === id);
             if (!patient) return;
+            const updatedData = { ...patient, ...dataToUpdate };
+            delete updatedData.id; // MockAPI's PUT doesn't like the id in the body
             try {
-                const response = await fetch(`${API_BASE_URL}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...patient, ...dataToUpdate }) });
+                const response = await fetch(`${API_BASE_URL}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedData) });
                 if (!response.ok) throw new Error('Update error');
-                const updatedPatient = await response.json();
+                const resultPatient = await response.json();
                 const index = allPatients.findIndex(p => p.id === id);
-                if (index !== -1) allPatients[index] = updatedPatient;
+                if (index !== -1) allPatients[index] = resultPatient;
                 renderAllTables();
             } catch (error) { console.error("Update failed:", error); alert("操作失敗！"); }
         };
         const transferToOpd = async (id) => { if (!confirm('確定要將此病人轉為門診常規嗎？')) return; await updatePatientField(id, { status: 'opd' }); };
-        const archivePatient = async (id, reason) => { await updatePatientField(id, { isDeleted: true, status: 'deleted', deleteReason: reason, deletedAt: new Date().toISOString() }); };
+        const archivePatient = async (id, reason) => { const patient = allPatients.find(p => p.id === id); await updatePatientField(id, { isDeleted: true, status: 'deleted', originalStatus: patient.status, deleteReason: reason, deletedAt: new Date().toISOString() }); };
         const restorePatient = async (id) => { const patient = allPatients.find(p => p.id === id); if (!patient || !confirm(`確定要將病人「${patient.name}」復原到「${patient.originalStatus === 'ipd' ? '住院' : '門診'}」列表嗎？`)) return; await updatePatientField(id, { isDeleted: false, status: patient.originalStatus, deleteReason: null, deletedAt: null }); };
         const deletePatient = (id) => { const dialog = document.getElementById('delete-reason-dialog'); const optionsContainer = document.getElementById('delete-reason-options'); optionsContainer.innerHTML = DELETE_REASONS.map(reason => `<button value="${reason}">${reason}</button>`).join(''); const handleReasonSelection = (event) => { const selectedReason = event.target.value; if(selectedReason && selectedReason !== 'cancel') { archivePatient(id, selectedReason); } dialog.close(); }; optionsContainer.addEventListener('click', handleReasonSelection, { once: true }); document.getElementById('delete-cancel-btn').addEventListener('click', () => dialog.close(), { once: true }); dialog.showModal(); };
-
-        window.app = { editPatient: (id) => { const p = allPatients.find(p => p.id === id); if (p) openModal(p.status, p); }, deletePatient, transferToOpd, restorePatient };
+        
+        window.app = { editPatient, deletePatient, transferToOpd, restorePatient };
+        
         tabButtons.forEach(button => { button.addEventListener('click', (e) => { const targetTab = e.currentTarget.dataset.tab; tabButtons.forEach(btn => btn.classList.remove('active')); tabContents.forEach(content => content.classList.remove('active')); e.currentTarget.classList.add('active'); document.getElementById(targetTab).classList.add('active'); }); });
         document.getElementById('add-ipd-btn').addEventListener('click', () => openModal('ipd'));
         document.getElementById('add-opd-btn').addEventListener('click', () => openModal('opd'));
