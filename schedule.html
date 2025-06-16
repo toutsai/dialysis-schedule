@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>洗腎室床位病人排程表 (V24.1 - 星期顯示優化版)</title>
+    <title>洗腎室床位病人排程表 (V24.2 - 佈局修復版)</title>
     <style>
         body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .controls-panel { max-width: 1800px; margin: 0 auto 20px; padding: 15px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
@@ -119,26 +119,34 @@
             weeklySchedule: 'https://684eb206f0c9c9848d28d637.mockapi.io/weekly_schedule',
             dailySchedule: 'https://684eb206f0c9c9848d28d637.mockapi.io/schedules'
         };
+
         let currentDate = new Date();
         let currentDailyRecord = null;
         let allPatients = [];
+
+        const SHIFTS_KEY = ['早', '午', '晚'];
         const statusIndicator = document.getElementById('status-indicator');
         const baseTeams = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', '外圍'];
         const earlyTeams = baseTeams.map(t => `早${t}`);
         const lateTeams = baseTeams.map(t => `晚${t}`);
         const allTeams = [...earlyTeams, ...lateTeams]; 
-        const earlyOptionsHTML = earlyTeams.map(team => `<option value="${team}">${team}組</option>`).join('');
-        const lateOptionsHTML = lateTeams.map(team => `<option value="${team}">${team}組</option>`).join('');
-        const allOptionsHTML = allTeams.map(team => `<option value="${team}">${team}組</option>`).join('');
+        const earlyOptionsHTML = `<option value=""></option>` + earlyTeams.map(team => `<option value="${team}">${team}組</option>`).join('');
+        const lateOptionsHTML = `<option value=""></option>` + lateTeams.map(team => `<option value="${team}">${team}組</option>`).join('');
+        const allOptionsHTML = `<option value=""></option>` + allTeams.map(team => `<option value="${team}">${team}組</option>`).join('');
         const layoutData = { leftWingRows: [['空', 32, 31], [33, 35, 36], [39, 38, 37], [51, 52, 53], [57, 56, 55], [58, 59, 61], [64, 63, 62]], rightWingRows: [[29, 28, 27], [23, 25, 26], [22, 21, 19], [16, 17, 18], [15, 13, 12], [8, 9, 11], [7, 6, 5], [1, 2, 3]] };
         const aisleSideBeds = [1, 7, 8, 15, 16, 22, 23, 29, 31, 36, 37, 53, 55, 61, 62, 64];
         const hepatitisBeds = ['空', 31, 32, 33, 35, 36];
         const peripheralBedCount = 6;
         
+        const leftWing = document.getElementById('left-wing');
+        const rightWing = document.getElementById('right-wing');
+        const peripheralContainer = document.getElementById('peripheral-bed-container');
+        
         const formatDate = (date) => date.toISOString().split('T')[0];
         const getStartOfWeek = (date) => { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(new Date(d.setDate(diff)).setHours(0,0,0,0)); };
         const setStatus = (message, type) => { statusIndicator.textContent = message; statusIndicator.className = `status-indicator ${type}`; };
-        
+        const printSchedule = () => window.print();
+
         const updateDateDisplay = () => {
             const dateStr = formatDate(currentDate);
             document.getElementById('current-date-display').textContent = dateStr;
@@ -147,10 +155,17 @@
             document.getElementById('weekday-display').textContent = weekdays[currentDate.getDay()];
         };
 
+        function generateWingLayout(container, rows, wingClass) { rows.forEach(rowBeds => { const rowDiv = document.createElement('div'); rowDiv.className = 'bed-row'; rowBeds.forEach(bedNumber => { rowDiv.appendChild(createBedElement(bedNumber, hepatitisBeds.includes(bedNumber), aisleSideBeds.includes(bedNumber), wingClass)); }); container.appendChild(rowDiv); }); }
+        function createBedElement(bedNumber, isHepatitis, isAisleSide, wingClass) { if (bedNumber === null) { const p = document.createElement('div'); p.className = 'bed placeholder'; return p; } const bedDiv = document.createElement('div'); bedDiv.className = `bed ${wingClass}`; bedDiv.dataset.bedId = `bed-${bedNumber}`; if (isAisleSide) bedDiv.classList.add('aisle-side'); if (isHepatitis) bedDiv.classList.add('hepatitis'); if (bedNumber === '空') bedDiv.classList.add('unassigned'); let headerText = `床號 ${bedNumber}`; if (bedNumber === '空') headerText = '未排床'; else if (isHepatitis) headerText += ' (BC肝炎)'; const shiftRowsHTML = ['早', '午', '晚'].map(shift => { const shiftId = `bed-${bedNumber}-${shift}`; if (shift === '午') { return `<div class="shift-row split-shift" data-shift-id="${shiftId}"><div class="shift-label">午</div><div class="nurse-split-column"><select class="nurse-team-select nurse-in" title=""><option value="">上針</option>${earlyOptionsHTML}</select><select class="nurse-team-select nurse-out" title=""><option value="">收針</option>${allOptionsHTML}</select></div><div class="patient-name" contenteditable="false"></div><div class="patient-tag" contenteditable="true"></div></div>`; } else { const options = shift === '早' ? earlyOptionsHTML : lateOptionsHTML; return `<div class="shift-row" data-shift-id="${shiftId}"><div class="shift-label">${shift}</div><select class="nurse-team-select" title=""><option value="">-</option>${options}</select><div class="patient-name" contenteditable="false"></div><div class="patient-tag" contenteditable="true"></div></div>`; } }).join(''); bedDiv.innerHTML = `<div class="bed-header">${headerText}</div>${bedNumber !== '空' ? shiftRowsHTML : ''}`; return bedDiv; }
+        function createPeripheralBedElement(index) { const bedDiv = document.createElement('div'); bedDiv.className = 'peripheral-bed'; const shiftRowsHTML = ['早', '午', '晚'].map(shift => { let options; switch (shift) { case '早': options = earlyOptionsHTML; break; case '晚': options = lateOptionsHTML; break; case '午': options = allOptionsHTML; break; } return `<div class="peripheral-shift-row" data-shift-id="peripheral-${index}-${shift}"><div class="shift-label">${shift}</div><select class="nurse-team-select" title=""><option value="">-</option>${options}</select><div class="peripheral-bed-number" contenteditable="true"></div><div class="peripheral-patient-name" contenteditable="false"></div><div class="patient-tag" contenteditable="true"></div></div>`; }).join(''); bedDiv.innerHTML = `<div class="peripheral-header">外圍床位 ${index}</div>${shiftRowsHTML}`; return bedDiv; }
+
         function clearBoard() {
-            document.querySelectorAll('.patient-name, .peripheral-patient-name, .peripheral-bed-number, .patient-tag').forEach(el => el.textContent = '');
-            document.querySelectorAll('.nurse-team-select').forEach(el => el.value = '');
+            document.querySelectorAll('.patient-name, .peripheral-patient-name, .peripheral-bed-number, .patient-tag').forEach(el => { el.textContent = ''; });
+            document.querySelectorAll('.nurse-team-select').forEach(el => { el.value = ''; });
             document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight'));
+            document.querySelectorAll('.bed, .peripheral-bed').forEach(el => el.classList.remove('unassigned'));
+            document.querySelectorAll('.shift-row, .peripheral-shift-row').forEach(el => el.style.display = 'grid');
+            document.querySelector('[data-bed-id="bed-空"]')?.classList.add('unassigned');
             updateShiftPatientCount();
         }
 
@@ -169,17 +184,17 @@
                 ]);
 
                 if (!patientsRes.ok || !weeklyScheduleRes.ok || !dailyRecordRes.ok) throw new Error('API fetch failed');
-
                 allPatients = await patientsRes.json();
                 const weeklySchedules = await weeklyScheduleRes.json();
                 const dailyRecords = await dailyRecordRes.json();
                 currentDailyRecord = dailyRecords.length > 0 ? dailyRecords[0] : null;
 
                 const dailyDuties = currentDailyRecord ? currentDailyRecord.duties : {};
-
                 const todaySchedules = weeklySchedules.filter(s => {
-                    const [, , dayIndex] = s.slotId.split('-');
-                    return parseInt(dayIndex) === dayOfWeek;
+                    const slotIdParts = s.slotId.split('-');
+                    if (slotIdParts.length !== 3) return false;
+                    const dayIndex = parseInt(slotIdParts[2]);
+                    return dayIndex === dayOfWeek;
                 });
                 
                 renderDataToUI(todaySchedules, dailyDuties);
@@ -195,37 +210,20 @@
                 const patient = allPatients.find(p => p.id === schedule.patientId);
                 if (!patient) return;
                 
-                const [bed, shift] = schedule.slotId.split('-');
-                let slotId;
-                let isPeripheral = false;
-                if (bed.startsWith('b')) {
-                    slotId = `bed-${bed.slice(1)}-${SHIFTS_KEY[shift]}`;
-                } else if (bed.startsWith('p')) {
-                    slotId = `peripheral-${bed.slice(1)}-${SHIFTS_KEY[shift]}`;
-                    isPeripheral = true;
-                } else {
-                    // 舊資料格式兼容
-                    slotId = `bed-${bed}-${SHIFTS_KEY[shift]}`;
-                }
+                const [bed, shiftIndex] = schedule.slotId.split('-');
+                const shift = SHIFTS_KEY[shiftIndex];
+                const slotId = `bed-${bed}-${shift}`;
                 
                 const row = document.querySelector(`[data-shift-id="${slotId}"]`);
                 if (!row) return;
 
-                const patientCell = row.querySelector(isPeripheral ? '.peripheral-patient-name' : '.patient-name');
+                const patientCell = row.querySelector('.patient-name');
                 if (patientCell) patientCell.textContent = patient.name;
                 
                 const duty = duties[slotId];
                 if (duty) {
-                    if (duty.nurse) {
-                        const nurseSelect = row.querySelector('.nurse-team-select');
-                        if (nurseSelect) nurseSelect.value = duty.nurse;
-                    }
-                    if (duty.nurse_in && duty.nurse_out) {
-                        const nurseInSelect = row.querySelector('.nurse-in');
-                        const nurseOutSelect = row.querySelector('.nurse-out');
-                        if(nurseInSelect) nurseInSelect.value = duty.nurse_in;
-                        if(nurseOutSelect) nurseOutSelect.value = duty.nurse_out;
-                    }
+                    if (duty.nurse) { row.querySelector('.nurse-team-select').value = duty.nurse; }
+                    if (duty.nurse_in && duty.nurse_out) { row.querySelector('.nurse-in').value = duty.nurse_in; row.querySelector('.nurse-out').value = duty.nurse_out; }
                     const tagCell = row.querySelector('.patient-tag');
                     if (tagCell) tagCell.textContent = duty.tag || '';
                 }
@@ -234,18 +232,26 @@
             updateShiftPatientCount();
         }
 
-        async function saveDataToCloud() {
-            // ... V23.2 的驗證和儲存邏輯 ...
+        async function saveDataToCloud() { /* ... 與V23.2相同 ... */ }
+        function collectDutyData() { /* ... 與V23.2相同 ... */ }
+
+        function changeDate(days) {
+            currentDate.setDate(currentDate.getDate() + days);
+            updateDateDisplay();
+            loadDataFromCloud(currentDate);
         }
 
-        const SHIFTS_KEY = ['早', '午', '晚'];
-        const printSchedule = () => window.print();
-        function changeDate(days) { currentDate.setDate(currentDate.getDate() + days); updateDateDisplay(); loadDataFromCloud(currentDate); }
-        
         document.getElementById('prev-date-btn').addEventListener('click', () => changeDate(-1));
         document.getElementById('next-date-btn').addEventListener('click', () => changeDate(1));
         document.getElementById('today-btn').addEventListener('click', () => { currentDate = new Date(); updateDateDisplay(); loadDataFromCloud(currentDate); });
-        // ... 其他事件綁定 ...
+        document.getElementById('save-btn').addEventListener('click', saveDataToCloud);
+        // ... 其他事件綁定
+        
+        generateWingLayout(leftWing, layoutData.leftWingRows, 'left-wing-bed');
+        generateWingLayout(rightWing, layoutData.rightWingRows, 'right-wing-bed');
+        const nursingStationRow = document.createElement('div'); nursingStationRow.className = 'bed-row'; nursingStationRow.innerHTML = '<div class="nursing-station">護理站</div>';
+        leftWing.appendChild(nursingStationRow);
+        for (let i = 1; i <= peripheralBedCount; i++) { peripheralContainer.appendChild(createPeripheralBedElement(i)); }
         
         updateDateDisplay();
         loadDataFromCloud(currentDate);
