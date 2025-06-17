@@ -2,9 +2,8 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>護理師組別統計報表 (V24.1 - 框架預載入版)</title>
+    <title>護理師組別統計報表 (V24.2 - 日期與顏色最終修正版)</title>
     <style>
-        /* CSS 與 V24.0 完全相同 */
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; padding: 20px; background-color: #f9f9f9; }
         .top-bar { display: flex; justify-content: space-between; align-items: center; max-width: 100%; margin: 0 auto 20px; }
         h1 { text-align: center; color: #333; flex-grow: 1; margin: 0; }
@@ -29,12 +28,13 @@
         .name-select:focus { outline: 2px solid #fbc02d; }
         .patient-list-cell { text-align: left; vertical-align: top; white-space: pre-wrap; min-height: 50px; }
         .patient-list-cell span { display: block; padding: 2px 4px; margin-bottom: 2px; border-radius: 3px; }
+        .patient-list-cell .tag-new { background-color: #fff176 !important; }
         .patient-list-cell .tag-chou { background-color: #90caf9 !important; }
         .patient-list-cell .hospitalized { background-color: #ffcdd2 !important; }
         .patient-list-cell .tag-huan { background-color: #e3f2fd !important; }
         .patient-list-cell .tag-liang { background-color: #ffcc80 !important; }
         .patient-list-cell .tag-b { background-color: #ffe0b2 !important; }
-        @media print { body { padding: 10px; background-color: #fff; font-size: 8pt; } .controls, h1, .top-bar, .status-indicator, .date-navigator { display: none; } .container { max-width: 100%; } .table-container { box-shadow: none; } .name-select { -webkit-appearance: none; -moz-appearance: none; appearance: none; background-color: transparent; } .patient-list-cell span { background-color: inherit !important; -webkit-print-color-adjust: exact; color-adjust: exact; } }
+        @media print { body { padding: 10px; background-color: #fff; font-size: 8pt; } .controls, h1, .top-bar, .status-indicator { display: none; } .container { max-width: 100%; } .table-container { box-shadow: none; } .name-select { -webkit-appearance: none; -moz-appearance: none; appearance: none; background-color: transparent; } .patient-list-cell span { background-color: inherit !important; -webkit-print-color-adjust: exact; color-adjust: exact; } }
     </style>
 </head>
 <body>
@@ -95,133 +95,58 @@
             weekdayDisplay.textContent = weekdays[dateObj.getDay()];
         }
         
+        async function loadStatsFromCloud(dateStr) {
+            earlyTable.innerHTML = '';
+            lateTable.innerHTML = '';
+            currentRecord = null;
+            setStatus('讀取中...');
+            try {
+                const response = await fetch(`${API_BASE_URL}?date=${dateStr}`);
+                if (!response.ok) throw new Error('Network error');
+                const data = await response.json();
+                if (data.length > 0) {
+                    currentRecord = data[0];
+                    loadReportData(currentRecord);
+                    setStatus('資料已載入');
+                } else {
+                    setStatus('本日無資料');
+                }
+            } catch (error) { console.error('讀取報表資料失敗:', error); setStatus('讀取失敗'); }
+        }
+
         function updateAndLoad(newDate) {
             currentDate = newDate;
-            const dateStr = formatDate(currentDate);
             updateDisplay(currentDate);
+            const dateStr = formatDate(currentDate);
             const newUrl = new URL(window.location);
             newUrl.searchParams.set('date', dateStr);
             window.history.pushState({}, '', newUrl);
             loadStatsFromCloud(dateStr);
         }
         
-        // --- CHANGE START: 拆分渲染流程 ---
-        function renderStaticFrames() {
-            renderTableFrame('early', ['早班', '午班(上針)', '午班(收針)']);
-            renderTableFrame('late', ['午班(收針)', '晚班']);
-        }
-        
-        function renderTableFrame(shiftType, rowHeaders) {
-            const tableElement = document.getElementById(`${shiftType}-shift-table`);
-            tableElement.innerHTML = '';
-            
-            const headerRow = document.createElement('tr');
-            headerRow.className = 'team-header-row';
-            headerRow.innerHTML = `<th class="row-header"></th>` + baseTeams.map(team => `<td>${shiftType === 'early' ? '早' : '晚'}${team}組</td>`).join('');
-            
-            const nameRow = document.createElement('tr');
-            nameRow.innerHTML = `<th class="row-header">姓名</th>` + baseTeams.map(team => `<td class="team-name-cell"><select class="name-select" data-team-id="${shiftType === 'early' ? '早' : '晚'}${team}">${nurseOptionsHTML}</select></td>`).join('');
-
-            tableElement.append(headerRow, nameRow);
-
-            rowHeaders.forEach(headerText => {
-                const row = document.createElement('tr');
-                row.innerHTML = `<th class="row-header">${headerText}</th>` + baseTeams.map(team => `<td class="patient-list-cell" data-team-id="${shiftType === 'early' ? '早' : '晚'}${team}" data-row-type="${headerText}"></td>`).join('');
-                tableElement.appendChild(row);
-            });
-        }
-        
-        async function loadStatsFromCloud(dateStr) {
-            // 清空舊資料，但保留框架
-            document.querySelectorAll('.patient-list-cell').forEach(cell => cell.innerHTML = '');
-            document.querySelectorAll('.name-select').forEach(select => select.value = '');
-
-            currentRecord = null;
-            setStatus('讀取中...');
-            
-            try {
-                const response = await fetch(`${API_BASE_URL}?date=${dateStr}`);
-                if (!response.ok) throw new Error('Network error');
-                const data = await response.json();
-                
-                if (data.length > 0) {
-                    currentRecord = data[0];
-                    fillReportData(currentRecord);
-                    setStatus('資料已載入');
-                } else {
-                    setStatus('本日無資料');
-                }
-            } catch (error) {
-                console.error('讀取報表資料失敗:', error);
-                setStatus('讀取失敗');
-            }
-        }
-
-        function fillReportData(fullData) {
-            const { schedule, names } = fullData;
-            const statsData = {};
-            const allNurseTeams = [...baseTeams.map(t => `早${t}`), ...baseTeams.map(t => `晚${t}`)];
-            allNurseTeams.forEach(team => { statsData[team] = { early: [], noon_in: [], noon_out: [], late: [] }; });
-            Object.keys(schedule).forEach(id => {
-                const shiftData = schedule[id];
-                const patientName = shiftData.patient;
-                if (!patientName) return;
-                let bedNumberDisplay = id.startsWith('peripheral-') ? (shiftData.bedNumber || '?') : id.split('-')[1];
-                const tag = shiftData.tag ? ` (${shiftData.tag})` : '';
-                const patientInfo = `${bedNumberDisplay} - ${patientName}${tag}`;
-                if (id.includes('-早')) { if (shiftData.nurse && statsData[shiftData.nurse]) statsData[shiftData.nurse].early.push(patientInfo); }
-                else if (id.includes('-晚')) { if (shiftData.nurse && statsData[shiftData.nurse]) statsData[shiftData.nurse].late.push(patientInfo); }
-                else if (id.includes('-午')) {
-                    if (shiftData.nurse_in && statsData[shiftData.nurse_in]) statsData[shiftData.nurse_in].noon_in.push(patientInfo);
-                    if (shiftData.nurse_out && statsData[shiftData.nurse_out]) statsData[shiftData.nurse_out].noon_out.push(patientInfo);
-                    if (shiftData.nurse && statsData[shiftData.nurse]) { statsData[shiftData.nurse].noon_in.push(patientInfo); statsData[shiftData.nurse].noon_out.push(patientInfo); }
-                }
-            });
-
-            // 填充病人列表
-            Object.keys(statsData).forEach(teamId => {
-                const teamData = statsData[teamId];
-                if (teamData.early.length > 0) document.querySelector(`td[data-team-id="${teamId}"][data-row-type="早班"]`).innerHTML = formatPatientListWithColor(teamData.early);
-                if (teamData.noon_in.length > 0) document.querySelector(`td[data-team-id="${teamId}"][data-row-type="午班(上針)"]`).innerHTML = formatPatientListWithColor(teamData.noon_in);
-                if (teamData.noon_out.length > 0) document.querySelector(`td[data-team-id="${teamId}"][data-row-type="午班(收針)"]`).innerHTML = formatPatientListWithColor(teamData.noon_out);
-                if (teamData.late.length > 0) document.querySelector(`td[data-team-id="${teamId}"][data-row-type="晚班"]`).innerHTML = formatPatientListWithColor(teamData.late);
-            });
-
-            // 填充護理師姓名
-            if (names) {
-                Object.keys(names).forEach(teamId => {
-                    const select = document.querySelector(`.name-select[data-team-id="${teamId}"]`);
-                    if (select) select.value = names[teamId];
-                });
-            }
-        }
-        // --- CHANGE END ---
-        
-        async function saveNamesToCloud(namesObject) { /* ...與V23.8相同... */ }
-        function clearNames() { /* ...與V23.8相同... */ }
-        function formatPatientListWithColor(arr) { /* ...與V23.8相同... */ }
         function changeDate(days) { const newDate = new Date(currentDate); newDate.setDate(newDate.getDate() + days); updateAndLoad(newDate); }
         function goToToday() { const newUrl = new URL(window.location); newUrl.searchParams.delete('date'); window.history.pushState({}, '', newUrl); updateAndLoad(new Date()); }
 
         function initialize() {
-            renderStaticFrames(); // 先畫好框架
             const urlParams = new URLSearchParams(window.location.search);
             const dateFromUrl = urlParams.get('date');
             const initialDate = dateFromUrl ? new Date(dateFromUrl + 'T00:00:00') : new Date();
             updateAndLoad(initialDate);
         }
 
+        async function saveNamesToCloud(namesObject) { if (!currentRecord) { alert("目前日期沒有排程資料，無法儲存。"); return; } currentRecord.names = namesObject; setStatus('儲存中...'); try { const response = await fetch(`${API_BASE_URL}/${currentRecord.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(currentRecord) }); if (!response.ok) throw new Error('Save error'); const action = Object.keys(namesObject).length > 0 ? '儲存' : '清空'; setStatus(`姓名資料已於 ${new Date().toLocaleTimeString()} ${action}成功`); alert(`護理師姓名資料已成功${action}！`); } catch (error) { console.error('儲存姓名失敗:', error); setStatus('儲存失敗'); } }
+        function clearNames() { if (!currentRecord) { alert("目前沒有資料可清空。"); return; } if (confirm("確定要清空本日所有的護理師姓名嗎？此操作將會儲存至雲端。")) { document.querySelectorAll('.name-select').forEach(select => { select.value = ''; }); saveNamesToCloud({}); } }
+        function loadReportData(fullData) { const { schedule, names } = fullData; const statsData = {}; const allNurseTeams = [...baseTeams.map(t => `早${t}`), ...baseTeams.map(t => `晚${t}`)]; allNurseTeams.forEach(team => { statsData[team] = { early: [], noon_in: [], noon_out: [], late: [] }; }); Object.keys(schedule).forEach(id => { const shiftData = schedule[id]; const patientName = shiftData.patient; if (!patientName) return; let bedNumberDisplay = id.startsWith('peripheral-') ? (shiftData.bedNumber || '?') : id.split('-')[1]; const tag = shiftData.tag ? ` (${shiftData.tag})` : ''; const patientInfo = `${bedNumberDisplay} - ${patientName}${tag}`; if (id.includes('-早')) { if (shiftData.nurse && statsData[shiftData.nurse]) statsData[shiftData.nurse].early.push(patientInfo); } else if (id.includes('-晚')) { if (shiftData.nurse && statsData[shiftData.nurse]) statsData[shiftData.nurse].late.push(patientInfo); } else if (id.includes('-午')) { if (shiftData.nurse_in && statsData[shiftData.nurse_in]) statsData[shiftData.nurse_in].noon_in.push(patientInfo); if (shiftData.nurse_out && statsData[shiftData.nurse_out]) statsData[shiftData.nurse_out].noon_out.push(patientInfo); if (shiftData.nurse && statsData[shiftData.nurse]) { statsData[shiftData.nurse].noon_in.push(patientInfo); statsData[shiftData.nurse].noon_out.push(patientInfo); } } }); generateEarlyShiftTable(earlyTable, '早', statsData, names || {}); generateLateShiftTable(lateTable, '晚', statsData, names || {}); }
+        function generateEarlyShiftTable(tableElement, shiftPrefix, statsData, statsNames) { tableElement.innerHTML = ''; const headerRow = document.createElement('tr'); headerRow.className = 'team-header-row'; headerRow.innerHTML = `<th class="row-header"></th>`; const nameRow = document.createElement('tr'); nameRow.innerHTML = `<th class="row-header">姓名</th>`; const earlyPatientsRow = document.createElement('tr'); earlyPatientsRow.innerHTML = `<th class="row-header">早班</th>`; const noonInPatientsRow = document.createElement('tr'); noonInPatientsRow.innerHTML = `<th class="row-header">午班(上針)</th>`; const noonOutPatientsRow = document.createElement('tr'); noonOutPatientsRow.innerHTML = `<th class="row-header">午班(收針)</th>`; baseTeams.forEach(team => { const fullTeamName = `${shiftPrefix}${team}`; const teamData = statsData[fullTeamName] || { early: [], noon_in: [], noon_out: [] }; headerRow.innerHTML += `<td>${fullTeamName}組</td>`; nameRow.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${fullTeamName}">${nurseOptionsHTML}</select></td>`; earlyPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.early)}</td>`; noonInPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.noon_in)}</td>`; noonOutPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.noon_out)}</td>`; }); tableElement.append(headerRow, nameRow, earlyPatientsRow, noonInPatientsRow, noonOutPatientsRow); tableElement.querySelectorAll('.name-select').forEach(s => { if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId]; }); };
+        function generateLateShiftTable(tableElement, shiftPrefix, statsData, statsNames) { tableElement.innerHTML = ''; const headerRow = document.createElement('tr'); headerRow.className = 'team-header-row'; headerRow.innerHTML = `<th class="row-header"></th>`; const nameRow = document.createElement('tr'); nameRow.innerHTML = `<th class="row-header">姓名</th>`; const noonOutPatientsRow = document.createElement('tr'); noonOutPatientsRow.innerHTML = `<th class="row-header">午班(收針)</th>`; const latePatientsRow = document.createElement('tr'); latePatientsRow.innerHTML = `<th class="row-header">晚班</th>`; baseTeams.forEach(team => { const fullTeamName = `${shiftPrefix}${team}`; const teamData = statsData[fullTeamName] || { noon_out: [], late: [] }; headerRow.innerHTML += `<td>${fullTeamName}組</td>`; nameRow.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${fullTeamName}">${nurseOptionsHTML}</select></td>`; noonOutPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.noon_out)}</td>`; latePatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.late)}</td>`; }); tableElement.append(headerRow, nameRow, noonOutPatientsRow, latePatientsRow); tableElement.querySelectorAll('.name-select').forEach(s => { if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId]; }); };
+        function formatPatientListWithColor(arr) { return arr.map(p => { const u = p.toUpperCase(); let c = ''; if (u.includes('新')) { c = 'tag-new'; } else if (u.includes('抽')) { c = 'tag-chou'; } else if (u.includes('住')) { c = 'hospitalized'; } else if (u.includes('換')) { c = 'tag-huan'; } else if (u.includes('兩')) { c = 'tag-liang'; } else if (u.includes('B')) { c = 'tag-b'; } return c ? `<span class="${c}">${p}</span>` : `<span>${p}</span>`; }).join(''); };
+        
         saveNamesBtn.addEventListener('click', () => { const newNames = {}; document.querySelectorAll('.name-select').forEach(select => { if (select.value) { newNames[select.dataset.teamId] = select.value; } }); saveNamesToCloud(newNames); });
         clearNamesBtn.addEventListener('click', clearNames);
         document.getElementById('prev-date-btn').addEventListener('click', () => changeDate(-1));
         document.getElementById('next-date-btn').addEventListener('click', () => changeDate(1));
         document.getElementById('today-btn').addEventListener('click', goToToday);
         
-        // --- 為求完整性，複製貼上其他未變動的函式 ---
-        saveNamesToCloud = async (namesObject) => { if (!currentRecord) { alert("目前日期沒有排程資料，無法儲存。"); return; } currentRecord.names = namesObject; setStatus('儲存中...'); try { const response = await fetch(`${API_BASE_URL}/${currentRecord.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(currentRecord) }); if (!response.ok) throw new Error('Save error'); const action = Object.keys(namesObject).length > 0 ? '儲存' : '清空'; setStatus(`姓名資料已於 ${new Date().toLocaleTimeString()} ${action}成功`); alert(`護理師姓名資料已成功${action}！`); } catch (error) { console.error('儲存姓名失敗:', error); setStatus('儲存失敗'); } };
-        clearNames = () => { if (!currentRecord) { alert("目前沒有資料可清空。"); return; } if (confirm("確定要清空本日所有的護理師姓名嗎？此操作將會儲存至雲端。")) { document.querySelectorAll('.name-select').forEach(select => { select.value = ''; }); saveNamesToCloud({}); } };
-        formatPatientListWithColor = (arr) => { return arr.map(p => { const u = p.toUpperCase(); let c = ''; if (u.includes('抽')) { c = 'tag-chou'; } else if (u.includes('住')) { c = 'hospitalized'; } else if (u.includes('換')) { c = 'tag-huan'; } else if (u.includes('兩')) { c = 'tag-liang'; } else if (u.includes('B')) { c = 'tag-b'; } return c ? `<span class="${c}">${p}</span>` : `<span>${p}</span>`; }).join(''); };
-
         initialize();
     });
     </script>
