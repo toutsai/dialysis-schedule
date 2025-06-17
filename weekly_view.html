@@ -3,11 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V2.2 - 穩定版)</title>
+    <title>門診週排班總表 (V2.1)</title>
     <style>
-        :root { --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0; --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545; --border-color: #dee2e6; --hepatitis-bg: #fffde7;}
+        :root {
+            --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
+            --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
+            --border-color: #dee2e6;
+            --hepatitis-bg: #fffde7;
+        }
+
+        /* --- CHANGE START: 新增反制樣式 --- */
+        html, body {
+            position: relative;
+            z-index: 1;
+        }
+        /* --- CHANGE END --- */
+        
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f8f9fa; margin: 0; padding: 20px; color: #212529; }
-        .container { max-width: 1800px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.075); }
+        
+        .container {
+            /* --- CHANGE START: 新增反制樣式 --- */
+            position: relative;
+            z-index: 100;
+            background-color: #fff; /* 確保有背景色，能蓋住下面的東西 */
+            /* --- CHANGE END --- */
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.075);
+        }
         .header-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px;}
         .date-navigator { display: flex; align-items: center; gap: 15px; }
         .date-navigator button, .main-actions button, dialog button { border: 1px solid #ccc; border-radius: 5px; padding: 8px 12px; font-size: 1em; cursor: pointer; background-color: #fff; }
@@ -87,12 +112,10 @@
         const FREQ_MAP = { '一三五': [0, 2, 4], '二四六': [1, 3, 5], '一四': [0, 3], '二五': [1, 4], '三六': [2, 5], '一五': [0, 4], '二六': [1, 5] };
         const bedLayout = [ 1,2,3,5,6,7,8,9,11,12,13,15,16,17,18,19,21,22,23,25,26,27,28,29, 31,32,33,35,36,37,38,39,51,52,53,55,56,57,58,59,61,62,63,64 ].sort((a, b) => a - b);
         const hepatitisBeds = [31, 32, 33, 35, 36];
-        
         let allPatients = [];
         let weeklyScheduleData = {};
         let currentWeekStartDate = getStartOfWeek(new Date());
         let pendingChanges = { toAdd: {}, toDelete: {} };
-
         const weekDisplay = document.getElementById('week-display');
         const addScheduleDialog = document.getElementById('add-schedule-dialog');
         const patientSearchInput = document.getElementById('patient-search');
@@ -103,12 +126,11 @@
         function getStartOfWeek(date) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(new Date(d.setDate(diff)).setHours(0,0,0,0)); }
         const formatDate = (date, withYear = false) => { const d = new Date(date); if (isNaN(d.getTime())) return ''; return withYear ? `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}` : `${d.getMonth() + 1}/${d.getDate()}`; };
         const generateDiseaseTags = (diseases) => { if (!diseases || diseases.length === 0) return ''; return diseases.map(d => `<span class="disease-tag">${d.slice(0,1)}</span>`).join(''); };
-        
-        function updateWeekDisplay() {
-            const start = new Date(currentWeekStartDate);
-            const end = new Date(start);
-            end.setDate(start.getDate() + 5);
-            weekDisplay.textContent = `${formatDate(start, true)} ~ ${formatDate(end, true)}`;
+        function updateWeekDisplay() { const start = new Date(currentWeekStartDate); const end = new Date(start); end.setDate(start.getDate() + 5); weekDisplay.textContent = `${formatDate(start, true)} ~ ${formatDate(end, true)}`; }
+
+        async function initialize() {
+            renderWeeklyScheduleTableFrame();
+            await loadAllData();
         }
 
         async function loadAllData() {
@@ -159,7 +181,6 @@
             currentWeekStartDate.setDate(currentWeekStartDate.getDate() + days);
             loadAllData();
         };
-
         const goToToday = () => {
             currentWeekStartDate = getStartOfWeek(new Date());
             loadAllData();
@@ -173,7 +194,6 @@
         document.getElementById('add-schedule-confirm-btn').addEventListener('click', handleAddSchedule);
         document.getElementById('add-schedule-cancel-btn').addEventListener('click', () => addScheduleDialog.close());
 
-        // --- Initial Load ---
         initialize();
     });
     </script>
