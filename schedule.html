@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>洗腎室床位病人排程表 (V27.2 - 最終優化版)</title>
+    <title>洗腎室床位病人排程表 (V27.3 - 顏色優先級修正版)</title>
     <style>
         body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .controls-panel { max-width: 1800px; margin: 0 auto 20px; padding: 15px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
@@ -161,8 +161,8 @@
             if (patientCell) {
                 const tagText = tagElement.textContent.toUpperCase();
                 patientCell.classList.remove('tag-chou', 'hospitalized', 'tag-huan', 'tag-liang', 'tag-b', 'tag-new');
-                if (tagText.includes('新')) { patientCell.classList.add('tag-new'); }
-                if (tagText.includes('抽')) { patientCell.classList.add('tag-chou'); } 
+                if (tagText.includes('新')) { patientCell.classList.add('tag-new'); } 
+                else if (tagText.includes('抽')) { patientCell.classList.add('tag-chou'); } 
                 else if (tagText.includes('住')) { patientCell.classList.add('hospitalized'); } 
                 else if (tagText.includes('換')) { patientCell.classList.add('tag-huan'); } 
                 else if (tagText.includes('兩')) { patientCell.classList.add('tag-liang'); } 
@@ -171,26 +171,19 @@
         };
 
         async function loadDataFromCloud(dateStr) {
-            clearBoard();
-            setStatus('讀取中...', 'loading');
+            clearBoard(); setStatus('讀取中...', 'loading');
             try {
                 const response = await fetch(`${API_BASE_URL}?date=${dateStr}`);
                 if (!response.ok) throw new Error(`HTTP 錯誤! 狀態: ${response.status}`);
                 const data = await response.json();
-                if (data.length > 0) {
-                    currentRecord = data[0];
-                    renderDataToUI(currentRecord.schedule || {});
-                    setStatus('資料已從雲端載入', 'saved');
-                } else {
-                    setStatus('本日無雲端資料，可建立新排程', 'unsaved');
-                }
+                if (data.length > 0) { currentRecord = data[0]; renderDataToUI(currentRecord.schedule || {}); setStatus('資料已從雲端載入', 'saved'); } 
+                else { setStatus('本日無雲端資料，可建立新排程', 'unsaved'); }
             } catch (error) { console.error('從雲端讀取資料失敗:', error); setStatus('讀取失敗，請檢查網路連線', 'error'); }
         }
 
         function renderDataToUI(scheduleData) {
             Object.keys(scheduleData).forEach(id => { 
-                const row = document.querySelector(`[data-shift-id="${id}"]`); 
-                if (!row) return; 
+                const row = document.querySelector(`[data-shift-id="${id}"]`); if (!row) return; 
                 const data = scheduleData[id]; 
                 if (data.patient) { const patientCell = row.querySelector('.patient-name, .peripheral-patient-name'); if (patientCell) patientCell.textContent = data.patient; }
                 if (data.bedNumber) { const bedNumberCell = row.querySelector('.peripheral-bed-number'); if(bedNumberCell) bedNumberCell.textContent = data.bedNumber; }
@@ -241,12 +234,8 @@
 
         const search = () => { clearAllHighlights(); const searchTerm = document.getElementById('search-input').value.trim().toUpperCase(); if (!searchTerm) return; document.querySelectorAll('.shift-row, .peripheral-shift-row').forEach(row => { let textContent = ''; row.querySelectorAll('select, div[contenteditable="true"]').forEach(el => { textContent += (el.tagName === 'SELECT' ? (el.value ? el.options[el.selectedIndex].text : '') : el.textContent) + ' '; }); if (textContent.toUpperCase().includes(searchTerm)) { row.classList.add('highlight'); } }); };
         
-        function changeDate(days) {
-            currentDate.setDate(currentDate.getDate() + days);
-            updateDateDisplay();
-            loadDataFromCloud(formatDate(currentDate));
-        }
-
+        function changeDate(days) { currentDate.setDate(currentDate.getDate() + days); updateDateDisplay(); loadDataFromCloud(formatDate(currentDate)); }
+        
         document.getElementById('prev-date-btn').addEventListener('click', () => changeDate(-1));
         document.getElementById('next-date-btn').addEventListener('click', () => changeDate(1));
         document.getElementById('today-btn').addEventListener('click', () => { currentDate = new Date(); updateDateDisplay(); loadDataFromCloud(formatDate(currentDate)); });
