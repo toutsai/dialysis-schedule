@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V2.0 - 穩定版)</title>
+    <title>門診週排班總表 (V2.1 - 全新重構穩定版)</title>
     <style>
         :root { --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0; --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545; --border-color: #dee2e6; --hepatitis-bg: #fffde7;}
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f8f9fa; margin: 0; padding: 20px; color: #212529; }
@@ -81,7 +81,10 @@
     </dialog>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const API = { patients: 'https://684eb206f0c9c9848d28d637.mockapi.io/patients', weeklySchedule: 'https://684eb206f0c9c9848d28d637.mockapi.io/weekly_schedule' };
+        const API = {
+            patients: 'https://684eb206f0c9c9848d28d637.mockapi.io/patients',
+            weeklySchedule: 'https://684eb206f0c9c9848d28d637.mockapi.io/weekly_schedule'
+        };
         const SHIFTS = ['早班', '午班', '晚班'];
         const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
         const FREQ_MAP = { '一三五': [0, 2, 4], '二四六': [1, 3, 5], '一四': [0, 3], '二五': [1, 4], '三六': [2, 5], '一五': [0, 4], '二六': [1, 5] };
@@ -104,7 +107,12 @@
         const formatDate = (date, withYear = false) => { const d = new Date(date); if (isNaN(d.getTime())) return ''; return withYear ? `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}` : `${d.getMonth() + 1}/${d.getDate()}`; };
         const generateDiseaseTags = (diseases) => { if (!diseases || diseases.length === 0) return ''; return diseases.map(d => `<span class="disease-tag">${d.slice(0,1)}</span>`).join(''); };
         
-        function updateWeekDisplay() { const start = new Date(currentWeekStartDate); const end = new Date(start); end.setDate(start.getDate() + 5); weekDisplay.textContent = `${formatDate(start, true)} ~ ${formatDate(end, true)}`; }
+        function updateWeekDisplay() {
+            const start = new Date(currentWeekStartDate);
+            const end = new Date(start);
+            end.setDate(start.getDate() + 5);
+            weekDisplay.textContent = `${formatDate(start, true)} ~ ${formatDate(end, true)}`;
+        }
 
         async function loadAllData() {
             pendingChanges = { toAdd: {}, toDelete: {} };
@@ -131,31 +139,61 @@
             const body = document.getElementById('weekly-schedule-body');
             let headerHtml = '<tr><th>床位</th><th>班次</th>';
             WEEKDAYS.forEach((day, dayIndex) => { const currentDate = new Date(currentWeekStartDate); currentDate.setDate(currentDate.getDate() + dayIndex); headerHtml += `<th><div class="weekday">${day}</div><div class="date">${formatDate(currentDate)}</div></th>`; });
-            headerHtml += '</tr>'; head.innerHTML = headerHtml; let bodyHtml = '';
+            headerHtml += '</tr>'; head.innerHTML = headerHtml;
+            let bodyHtml = '';
             bedLayout.forEach(bedNumber => {
                 const isHepatitis = hepatitisBeds.includes(bedNumber);
-                SHIFTS.forEach((shift, shiftIndex) => { const rowClass = isHepatitis ? 'hepatitis-bed' : ''; bodyHtml += `<tr class="${rowClass}">`; if (shiftIndex === 0) bodyHtml += `<td rowspan="3">${bedNumber}號床</td>`; bodyHtml += `<td>${shift}</td>`; WEEKDAYS.forEach((day, dayIndex) => { const slotId = `${bedNumber}-${shiftIndex}-${dayIndex}`; bodyHtml += `<td data-slot-id-wrapper="${slotId}"><div class="schedule-slot" data-slot-id="${slotId}"></div></td>`; }); bodyHtml += `</tr>`; });
+                SHIFTS.forEach((shift, shiftIndex) => {
+                    const rowClass = isHepatitis ? 'hepatitis-bed' : '';
+                    bodyHtml += `<tr class="${rowClass}">`;
+                    if (shiftIndex === 0) bodyHtml += `<td rowspan="3">${bedNumber}號床</td>`;
+                    bodyHtml += `<td>${shift}</td>`;
+                    WEEKDAYS.forEach((day, dayIndex) => { const slotId = `${bedNumber}-${shiftIndex}-${dayIndex}`; bodyHtml += `<td data-slot-id-wrapper="${slotId}"><div class="schedule-slot" data-slot-id="${slotId}"></div></td>`; });
+                    bodyHtml += `</tr>`;
+                });
             });
-            body.innerHTML = bodyHtml; addSlotEventListeners();
+            body.innerHTML = bodyHtml;
+            addSlotEventListeners();
         };
         
-        const populateScheduleData = () => { document.querySelectorAll('.schedule-slot').forEach(slot => { const slotId = slot.dataset.slotId; const schedule = pendingChanges.toAdd[slotId] || weeklyScheduleData[slotId]; slot.innerHTML = ''; slot.className = 'schedule-slot'; if (schedule && !pendingChanges.toDelete[schedule.id]) { const patient = allPatients.find(p => p.id === schedule.patientId); if (patient) { slot.classList.add('filled', `status-${patient.status}`); slot.innerHTML = `<div class="slot-patient-name">${patient.name}${generateDiseaseTags(patient.diseases)}</div><div class="slot-patient-mode">${patient.mode || ''}</div>`; } } }); };
+        const populateScheduleData = () => {
+            document.querySelectorAll('.schedule-slot').forEach(slot => {
+                const slotId = slot.dataset.slotId;
+                const schedule = pendingChanges.toAdd[slotId] || weeklyScheduleData[slotId];
+                slot.innerHTML = '';
+                slot.className = 'schedule-slot';
+                if (schedule && !pendingChanges.toDelete[schedule.id]) {
+                    const patient = allPatients.find(p => p.id === schedule.patientId);
+                    if (patient) {
+                        slot.classList.add('filled', `status-${patient.status}`);
+                        slot.innerHTML = `<div class="slot-patient-name">${patient.name}${generateDiseaseTags(patient.diseases)}</div><div class="slot-patient-mode">${patient.mode || ''}</div>`;
+                    } else {
+                        slot.classList.add('filled');
+                        slot.innerHTML = '病人資料錯誤';
+                    }
+                }
+            });
+        };
+
         function addSlotEventListeners() { document.querySelectorAll('.schedule-slot').forEach(slot => { slot.addEventListener('click', (e) => { const slotId = e.currentTarget.dataset.slotId; const schedule = pendingChanges.toAdd[slotId] || weeklyScheduleData[slotId]; if (schedule && !pendingChanges.toDelete[schedule.id]) { clearScheduleSlot(schedule.id, slotId); } else { openAddScheduleDialog(slotId); } }); }); };
+        
         const updateStatsToolbar = () => { const statsToolbar = document.getElementById('stats-toolbar'); const dailyCounts = WEEKDAYS.map(() => ({ '早班': 0, '午班': 0, '晚班': 0 })); const currentSchedule = { ...weeklyScheduleData, ...pendingChanges.toAdd }; Object.values(currentSchedule).forEach(s => { if(pendingChanges.toDelete[s.id]) return; const slotIdParts = s.slotId.split('-'); if (slotIdParts.length === 3) { const [, shiftIndex, dayIndex] = slotIdParts; if(dailyCounts[dayIndex] && SHIFTS[shiftIndex]) { dailyCounts[dayIndex][SHIFTS[shiftIndex]]++; } } }); statsToolbar.innerHTML = dailyCounts.map((counts, dayIndex) => `<div class="stat-item"><strong>${WEEKDAYS[dayIndex]}:</strong><div class="stat-shift-group"><span class="shift-early">早: ${counts['早班']}</span><span class="shift-noon">午: ${counts['午班']}</span><span class="shift-late">晚: ${counts['晚班']}</span></div></div>`).join(''); };
-        const openAddScheduleDialog = (slotId) => { const relevantPatients = allPatients.filter(p => (p.status === 'opd' || p.status === 'ipd') && !p.isDeleted); const renderOptions = (patients) => { return patients.map(p => `<option value="${p.id}">${p.name} (${p.medicalRecordNumber || 'N/A'})</option>`).join(''); }; const opdPatients = relevantPatients.filter(p => p.status === 'opd'); const ipdPatients = relevantPatients.filter(p => p.status === 'ipd'); let optionsHtml = ''; if (opdPatients.length > 0) optionsHtml += `<optgroup label="門診常規">${renderOptions(opdPatients)}</optgroup>`; if (ipdPatients.length > 0) optionsHtml += `<optgroup label="住院病人">${renderOptions(ipdPatients)}</optgroup>`; patientSelect.innerHTML = optionsHtml; patientSearchInput.value = ''; const updateFreqDisplay = () => { const patient = allPatients.find(p => p.id === patientSelect.value); patientFreqDisplay.textContent = patient ? patient.frequency : '請選擇病人'; }; patientSelect.onchange = updateFreqDisplay; patientSelect.dispatchEvent(new Event('change')); patientSearchInput.oninput = () => { const searchTerm = patientSearchInput.value.toLowerCase(); const filtered = relevantPatients.filter(p => p.name.toLowerCase().includes(searchTerm) || (p.medicalRecordNumber && p.medicalRecordNumber.includes(searchTerm))); const filteredOpd = filtered.filter(p => p.status === 'opd'); const filteredIpd = filtered.filter(p => p.status === 'ipd'); let filteredHtml = ''; if(filteredOpd.length > 0) filteredHtml += `<optgroup label="門診常規">${renderOptions(filteredOpd)}</optgroup>`; if(filteredIpd.length > 0) filteredHtml += `<optgroup label="住院病人">${renderOptions(filteredIpd)}</optgroup>`; patientSelect.innerHTML = filteredHtml || '<option disabled>找不到病人</option>'; }; document.getElementById('fill-by-freq').checked = true; addScheduleDialog.showModal(); addScheduleDialog.dataset.slotId = slotId; };
+        
+        const openAddScheduleDialog = (slotId) => { const opdPatients = allPatients.filter(p => p.status === 'opd' && !p.isDeleted); const ipdPatients = allPatients.filter(p => p.status === 'ipd' && !p.isDeleted); const createOption = p => `<option value="${p.id}">${p.name} (${p.medicalRecordNumber || 'N/A'})</option>`; let optionsHtml = ''; if (opdPatients.length > 0) { optionsHtml += `<optgroup label="門診常規">${opdPatients.map(createOption).join('')}</optgroup>`; } if (ipdPatients.length > 0) { optionsHtml += `<optgroup label="住院病人">${ipdPatients.map(createOption).join('')}</optgroup>`; } patientSelect.innerHTML = optionsHtml; patientSearchInput.value = ''; const updateFreqDisplay = () => { const patient = allPatients.find(p => p.id === patientSelect.value); patientFreqDisplay.textContent = patient ? patient.frequency : '請選擇病人'; }; patientSelect.onchange = updateFreqDisplay; patientSelect.dispatchEvent(new Event('change')); patientSearchInput.oninput = () => { const searchTerm = patientSearchInput.value.toLowerCase(); const filteredPatients = allPatients.filter(p => (p.status === 'opd' || p.status === 'ipd') && !p.isDeleted && (p.name.toLowerCase().includes(searchTerm) || (p.medicalRecordNumber && p.medicalRecordNumber.includes(searchTerm)))); const filteredOpd = filteredPatients.filter(p => p.status === 'opd'); const filteredIpd = filteredPatients.filter(p => p.status === 'ipd'); let filteredOptionsHtml = ''; if (filteredOpd.length > 0) filteredOptionsHtml += `<optgroup label="門診常規">${filteredOpd.map(createOption).join('')}</optgroup>`; if (filteredIpd.length > 0) filteredOptionsHtml += `<optgroup label="住院病人">${filteredIpd.map(createOption).join('')}</optgroup>`; patientSelect.innerHTML = filteredOptionsHtml || '<option disabled>找不到病人</option>'; }; document.getElementById('fill-by-freq').checked = true; addScheduleDialog.showModal(); addScheduleDialog.dataset.slotId = slotId; };
+        
         const updateStatusIndicator = () => { const hasChanges = Object.keys(pendingChanges.toAdd).length > 0 || Object.keys(pendingChanges.toDelete).length > 0; statusIndicator.style.display = hasChanges ? 'inline' : 'none'; };
+        
         function checkDuplicateOnSameDay(patientId, daysToCheck) { const currentSchedule = { ...weeklyScheduleData, ...pendingChanges.toAdd }; for (const day of daysToCheck) { for (let shift = 0; shift < SHIFTS.length; shift++) { for (let bedIndex = 0; bedIndex < bedLayout.length; bedIndex++) { const bedNumber = bedLayout[bedIndex]; const checkSlotId = `${bedNumber}-${shift}-${day}`; const schedule = currentSchedule[checkSlotId]; if (schedule && !pendingChanges.toDelete[schedule.id] && schedule.patientId === patientId) { alert(`儲存失敗：病人已於 ${WEEKDAYS[day]} ${SHIFTS[shift]} 排班！`); return true; } } } } return false; }
+        
         const handleAddSchedule = () => { const slotId = addScheduleDialog.dataset.slotId; const patientId = patientSelect.value; if (!patientId) return alert('請選擇一位病人！'); const patient = allPatients.find(p => p.id === patientId); const fillType = document.querySelector('input[name="fill-type"]:checked').value; const freq = patient.frequency; const dayIndexesBasedOnFreq = FREQ_MAP[freq]; const [, , dayIndex] = slotId.split('-').map(Number); const daysToFill = (fillType === 'frequency' && dayIndexesBasedOnFreq) ? dayIndexesBasedOnFreq : [dayIndex]; if (checkDuplicateOnSameDay(patientId, daysToFill)) return; const [bed, shiftIndex] = slotId.split('-'); const weekStart = currentWeekStartDate.toISOString().split('T')[0]; daysToFill.forEach(d_idx => { const newSlotId = `${bed}-${shiftIndex}-${d_idx}`; pendingChanges.toAdd[newSlotId] = { slotId: newSlotId, patientId, weekStart }; }); addScheduleDialog.close(); populateScheduleData(); updateStatsToolbar(); updateStatusIndicator(); };
         const clearScheduleSlot = (scheduleId, slotId) => { const schedule = pendingChanges.toAdd[slotId] || weeklyScheduleData[slotId]; if (!schedule || !confirm('確定要清除這個排班嗎？(此操作需儲存後才會生效)')) return; if (pendingChanges.toAdd[slotId]) { delete pendingChanges.toAdd[slotId]; } if (schedule.id) { pendingChanges.toDelete[schedule.id] = true; } populateScheduleData(); updateStatsToolbar(); updateStatusIndicator(); };
         const saveChangesToCloud = async () => { const toDeletePromises = Object.keys(pendingChanges.toDelete).map(id => fetch(`${API.weeklySchedule}/${id}`, { method: 'DELETE' })); const toAddPromises = Object.values(pendingChanges.toAdd).map(data => fetch(API.weeklySchedule, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })); try { await Promise.all([...toDeletePromises, ...toAddPromises]); alert('所有變更已成功儲存！'); await loadAllData(); } catch (error) { console.error("Save changes failed:", error); alert('儲存變更失敗！'); } };
         const copyToNextWeek = async () => { if (!confirm('確定要將本週的全部排班複製到下一週嗎？這將會覆蓋下一週的現有排班。')) return; const nextWeekStartDate = new Date(currentWeekStartDate); nextWeekStartDate.setDate(nextWeekStartDate.getDate() + 7); const nextWeekStartStr = nextWeekStartDate.toISOString().split('T')[0]; const currentData = { ...weeklyScheduleData, ...pendingChanges.toAdd }; for(const id in pendingChanges.toDelete) { Object.keys(currentData).forEach(key => { if (currentData[key].id === id) delete currentData[key]; }); } const schedulesToCopy = Object.values(currentData).map(({ slotId, patientId }) => ({ slotId, patientId, weekStart: nextWeekStartStr })); const existingNextWeekSchedules = await fetch(`${API.weeklySchedule}?weekStart=${nextWeekStartStr}`).then(res => res.json()); try { await Promise.all(existingNextWeekSchedules.map(s => fetch(`${API.weeklySchedule}/${s.id}`, { method: 'DELETE' }))); await Promise.all(schedulesToCopy.map(s => fetch(API.weeklySchedule, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(s) }))); alert('複製成功！現在將跳轉到下一週。'); changeWeek(7); } catch (error) { console.error("Copy failed:", error); alert('複製失敗！'); } };
-        
         const changeWeek = (days) => { currentWeekStartDate.setDate(currentWeekStartDate.getDate() + days); loadAllData(); };
-        const goToToday = () => { currentWeekStartDate = getStartOfWeek(new Date()); loadAllData(); };
 
         document.getElementById('prev-week-btn').addEventListener('click', () => changeWeek(-7));
         document.getElementById('next-week-btn').addEventListener('click', () => changeWeek(7));
-        document.getElementById('today-week-btn').addEventListener('click', goToToday);
+        document.getElementById('today-week-btn').addEventListener('click', () => { currentWeekStartDate = getStartOfWeek(new Date()); loadAllData(); });
         document.getElementById('copy-to-next-week-btn').addEventListener('click', copyToNextWeek);
         document.getElementById('save-changes-btn').addEventListener('click', saveChangesToCloud);
         document.getElementById('add-schedule-confirm-btn').addEventListener('click', handleAddSchedule);
