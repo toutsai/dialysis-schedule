@@ -1,12 +1,16 @@
+--- START OF FILE weekly_view.html ---
+
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V1.1)</title>
+    <title>門診週排班總表 (V1.2 - 功能增強版)</title>
     <style>
         :root {
-            --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
+            --green-bg: #e8f5e9; --green-text: #2e7d32;
+            --blue-bg: #e3f2fd; --blue-text: #1565c0;
+            --orange-bg: #fff3e0; --orange-text: #ef6c00;
             --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
             --border-color: #dee2e6;
         }
@@ -22,25 +26,31 @@
         .status-indicator { font-weight: bold; color: var(--danger-color); }
         .stats-toolbar { display: flex; justify-content: flex-start; gap: 20px; padding: 10px; background-color: #f8f9fa; border-radius: 5px; margin-bottom: 20px; flex-wrap: wrap; }
         .stat-item { display: flex; align-items: center; gap: 8px; }
-        .stat-item span { background-color: #e9ecef; padding: 4px 10px; border-radius: 15px; font-weight: bold; }
+        /* --- CHANGE START: 新增統計顏色樣式 --- */
+        .stat-item span { padding: 4px 10px; border-radius: 15px; font-weight: bold; }
+        .stat-shift-early { background-color: var(--green-bg); color: var(--green-text); }
+        .stat-shift-noon { background-color: var(--blue-bg); color: var(--blue-text); }
+        .stat-shift-late { background-color: var(--orange-bg); color: var(--orange-text); }
+        /* --- CHANGE END --- */
         .table-wrapper { max-height: 75vh; overflow: auto; }
         .weekly-schedule-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .weekly-schedule-table th, .weekly-schedule-table td { border: 1px solid var(--border-color); padding: 4px; text-align: center; vertical-align: middle; height: 65px; }
         .weekly-schedule-table thead th { background-color: #e9ecef; position: sticky; top: 0; z-index: 10; }
-        /* --- CHANGE START: 調整欄位寬度與樣式 --- */
-        .weekly-schedule-table th:nth-child(1) { width: 60px; } /* 床位欄 */
-        .weekly-schedule-table th:nth-child(2) { width: 50px; } /* 班次欄 */
+        .weekly-schedule-table th:nth-child(1) { width: 60px; }
+        .weekly-schedule-table th:nth-child(2) { width: 50px; }
         .weekly-schedule-table tbody td:nth-child(1), .weekly-schedule-table tbody td:nth-child(2) { background-color: #f8f9fa; font-weight: bold; position: sticky; z-index: 5; }
         .weekly-schedule-table tbody td:nth-child(1) { left: 0; }
         .weekly-schedule-table tbody td:nth-child(2) { left: 60px; text-align: left; padding-left: 10px; }
-        /* --- CHANGE END --- */
         .schedule-slot { width: 100%; height: 100%; box-sizing: border-box; border-radius: 5px; padding: 5px; cursor: pointer; transition: background-color 0.2s; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; }
         .schedule-slot:not(.filled):hover { background-color: #e0e0e0; }
         .schedule-slot.filled.status-opd { background-color: var(--green-bg); }
         .schedule-slot.filled.status-ipd { background-color: var(--blue-bg); }
         .slot-patient-name { font-weight: bold; }
         .slot-patient-mode { font-size: 0.9em; color: #555; }
-        .disease-tag { color: var(--red-text); font-weight: bold; margin-left: 4px;}
+        .disease-tag { color: var(--danger-color); font-weight: bold; margin-left: 4px;}
+        /* --- CHANGE START: 表頭日期樣式 --- */
+        .header-date { font-size: 0.8em; font-weight: normal; color: #555; }
+        /* --- CHANGE END --- */
         dialog { border: 1px solid #ccc; border-radius: 8px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 90%; max-width: 500px; }
         dialog::backdrop { background-color: rgba(0,0,0,0.5); }
         dialog h3 { margin-top: 0; }
@@ -78,8 +88,14 @@
         <h3>新增排班</h3>
         <div class="form-field"><label for="patient-search">搜尋病人 (姓名/病歷號)</label><input type="text" id="patient-search" placeholder="輸入關鍵字..."></div>
         <div class="form-field"><label for="patient-select">或直接選擇病人</label><select id="patient-select" size="10"></select></div>
-        <div class="form-field"><p>將依此病人的預設頻率填入：<strong id="patient-freq-display"></strong></p></div>
-        <div class="modal-footer"><button id="add-schedule-confirm-btn" style="background-color: var(--primary-color); color: white;">確認填入</button><button id="add-schedule-cancel-btn" value="cancel">取消</button></div>
+        <div class="form-field"><p>病人預設頻率：<strong id="patient-freq-display"></strong></p></div>
+        <!-- --- CHANGE START: 修改對話框按鈕 --- -->
+        <div class="modal-footer">
+            <button id="add-schedule-single-btn">單次填入</button>
+            <button id="add-schedule-freq-btn" style="background-color: var(--primary-color); color: white;">依頻率填入</button>
+            <button id="add-schedule-cancel-btn" value="cancel">取消</button>
+        </div>
+        <!-- --- CHANGE END --- -->
     </dialog>
 
     <script>
@@ -107,7 +123,7 @@
 
         function getStartOfWeek(date) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(new Date(d.setDate(diff)).setHours(0,0,0,0)); }
         function updateWeekDisplay() { const start = new Date(currentWeekStartDate); const end = new Date(start); end.setDate(start.getDate() + 5); weekDisplay.textContent = `${formatDate(start)} ~ ${formatDate(end)}`; }
-        const formatDate = (date) => { const d = new Date(date); return `${d.getMonth() + 1}月${d.getDate()}日`; };
+        const formatDate = (date) => { const d = new Date(date); return `${d.getMonth() + 1}/${d.getDate()}`; };
         const generateDiseaseTags = (diseases) => { if (!diseases || diseases.length === 0) return ''; return diseases.map(d => `<span class="disease-tag">${d.slice(0,1)}</span>`).join(''); };
 
         const loadAllData = async () => {
@@ -119,7 +135,7 @@
                     fetch(`${API.weeklySchedule}?weekStart=${currentWeekStartDate.toISOString().split('T')[0]}`)
                 ]);
                 if (!patientsRes.ok || !scheduleRes.ok) throw new Error('Network error');
-                allPatients = await patientsRes.json();
+                allPatients = (await patientsRes.json()).filter(p => !p.isDeleted);
                 const scheduleArray = await scheduleRes.json();
                 weeklyScheduleData = scheduleArray.reduce((acc, item) => { acc[item.slotId] = item; return acc; }, {});
                 renderAll();
@@ -130,12 +146,19 @@
             renderWeeklyScheduleTable();
             updateStatsToolbar();
         };
-
-        // --- CHANGE START: 徹底重構表格渲染邏輯 ---
+        
         const renderWeeklyScheduleTable = () => {
             const head = document.getElementById('weekly-schedule-head');
             const body = document.getElementById('weekly-schedule-body');
-            head.innerHTML = `<tr><th>床位</th><th>班次</th>${WEEKDAYS.map(day => `<th>${day}</th>`).join('')}</tr>`;
+
+            // --- CHANGE START: 表頭加入日期 ---
+            const headerCells = WEEKDAYS.map((day, index) => {
+                const d = new Date(currentWeekStartDate);
+                d.setDate(d.getDate() + index);
+                return `<th>${day}<br><span class="header-date">(${formatDate(d)})</span></th>`;
+            }).join('');
+            head.innerHTML = `<tr><th>床位</th><th>班次</th>${headerCells}</tr>`;
+            // --- CHANGE END ---
             
             let bodyHtml = '';
             for (let i = 1; i <= TOTAL_BEDS; i++) {
@@ -161,7 +184,6 @@
                 const slotId = slot.dataset.slotId;
                 const schedule = pendingChanges.toAdd[slotId] || weeklyScheduleData[slotId];
                 
-                // Clear previous state
                 slot.innerHTML = '';
                 slot.className = 'schedule-slot';
 
@@ -191,7 +213,6 @@
                 });
             });
         }
-        // --- CHANGE END ---
 
         const updateStatsToolbar = () => {
             const statsToolbar = document.getElementById('stats-toolbar');
@@ -199,20 +220,27 @@
             const currentSchedule = { ...weeklyScheduleData, ...pendingChanges.toAdd };
             Object.values(currentSchedule).forEach(s => {
                 if(pendingChanges.toDelete[s.id]) return;
-                const [, shiftIndex, dayIndex] = s.slotId.split('-');
+                const [, shiftIndex, dayIndex] = s.slotId.split('-').map(Number);
                 if(dailyCounts[dayIndex] && SHIFTS[shiftIndex]) {
                     dailyCounts[dayIndex][SHIFTS[shiftIndex]]++;
                 }
             });
-            statsToolbar.innerHTML = dailyCounts.map((counts, dayIndex) => `<div class="stat-item"><strong>${WEEKDAYS[dayIndex]}:</strong><span>早班: ${counts['早班']}</span><span>午班: ${counts['午班']}</span><span>晚班: ${counts['晚班']}</span></div>`).join('');
+            // --- CHANGE START: 統計加入顏色 class ---
+            statsToolbar.innerHTML = dailyCounts.map((counts, dayIndex) => 
+                `<div class="stat-item"><strong>${WEEKDAYS[dayIndex]}:</strong>` +
+                `<span class="stat-shift-early">早班: ${counts['早班']}</span>` +
+                `<span class="stat-shift-noon">午班: ${counts['午班']}</span>` +
+                `<span class="stat-shift-late">晚班: ${counts['晚班']}</span></div>`
+            ).join('');
+            // --- CHANGE END ---
         };
         
         const openAddScheduleDialog = (slotId) => {
-            const relevantPatients = allPatients.filter(p => (p.status === 'opd' || p.status === 'ipd') && !p.isDeleted);
+            const relevantPatients = allPatients.filter(p => (p.status === 'opd' || p.status === 'ipd'));
             const renderOptions = (patients) => { patientSelect.innerHTML = patients.map(p => `<option value="${p.id}">${p.name} (${p.medicalRecordNumber || 'N/A'}) [${p.status === 'ipd' ? '住' : '門'}]</option>`).join(''); };
             renderOptions(relevantPatients);
             patientSearchInput.value = '';
-            patientSelect.onchange = () => { const patient = relevantPatients.find(p => p.id === patientSelect.value); patientFreqDisplay.textContent = patient ? patient.frequency : '請選擇病人'; };
+            patientSelect.onchange = () => { const patient = relevantPatients.find(p => p.id === patientSelect.value); patientFreqDisplay.textContent = patient ? (patient.frequency || '無') : '請選擇病人'; };
             patientSelect.dispatchEvent(new Event('change'));
             patientSearchInput.oninput = () => { const searchTerm = patientSearchInput.value.toLowerCase(); const filtered = relevantPatients.filter(p => p.name.toLowerCase().includes(searchTerm) || (p.medicalRecordNumber && p.medicalRecordNumber.includes(searchTerm))); renderOptions(filtered); };
             addScheduleDialog.showModal(); addScheduleDialog.dataset.slotId = slotId;
@@ -223,24 +251,30 @@
             statusIndicator.style.display = hasChanges ? 'inline' : 'none';
         };
 
-        const handleAddSchedule = () => {
+        // --- CHANGE START: 修改新增排班邏輯 ---
+        const handleConfirmAdd = (isSingleFill = false) => {
             const slotId = addScheduleDialog.dataset.slotId;
             const patientId = patientSelect.value;
             if (!patientId) return alert('請選擇一位病人！');
+
             const patient = allPatients.find(p => p.id === patientId);
-            const freq = patient.frequency;
-            const dayIndexes = FREQ_MAP[freq];
-            
-            const [bed, shiftIndex] = slotId.split('-');
             const weekStart = currentWeekStartDate.toISOString().split('T')[0];
-            
-            if (dayIndexes) {
-                dayIndexes.forEach(d_idx => {
-                    const newSlotId = `${bed}-${shiftIndex}-${d_idx}`;
-                    pendingChanges.toAdd[newSlotId] = { slotId: newSlotId, patientId, weekStart };
-                });
-            } else {
+            const [bed, shiftIndexStr] = slotId.split('-');
+
+            if (isSingleFill) {
                 pendingChanges.toAdd[slotId] = { slotId, patientId, weekStart };
+            } else {
+                const freq = patient.frequency;
+                const dayIndexes = FREQ_MAP[freq];
+                if (dayIndexes) {
+                    dayIndexes.forEach(d_idx => {
+                        const newSlotId = `${bed}-${shiftIndexStr}-${d_idx}`;
+                        pendingChanges.toAdd[newSlotId] = { slotId: newSlotId, patientId, weekStart };
+                    });
+                } else {
+                    alert(`病人的頻率「${freq || '未設定'}」無法對應，將僅填入所選格子。`);
+                    pendingChanges.toAdd[slotId] = { slotId, patientId, weekStart };
+                }
             }
 
             addScheduleDialog.close();
@@ -248,13 +282,14 @@
             updateStatsToolbar();
             updateStatusIndicator();
         };
+        // --- CHANGE END ---
 
         const clearScheduleSlot = (scheduleId, slotId) => {
             if (!confirm('確定要清除這個排班嗎？(此操作需儲存後才會生效)')) return;
             if (pendingChanges.toAdd[slotId]) {
                 delete pendingChanges.toAdd[slotId];
             }
-            if (scheduleId) {
+            if (scheduleId && weeklyScheduleData[slotId]) { // 確保只把已儲存的加入待刪除
                 pendingChanges.toDelete[scheduleId] = true;
             }
             populateWeeklySchedule();
@@ -275,8 +310,62 @@
             }
         };
 
-        const copyToNextWeek = async () => { /* ...此函式無變動... */ };
-        const changeWeek = (days) => { currentWeekStartDate.setDate(currentWeekStartDate.getDate() + days); updateWeekDisplay(); loadAllData(); };
+        // --- CHANGE START: 實作複製到下一週功能 ---
+        const copyToNextWeek = async () => {
+            if (Object.keys(pendingChanges.toAdd).length > 0 || Object.keys(pendingChanges.toDelete).length > 0) {
+                alert('請先儲存目前變更，再執行複製操作。');
+                return;
+            }
+            if (!confirm('確定要將本週的排班完整複製到下一週嗎？此操作會覆蓋下一週的現有排班。')) return;
+
+            const nextWeekStartDate = new Date(currentWeekStartDate);
+            nextWeekStartDate.setDate(currentWeekStartDate.getDate() + 7);
+            const nextWeekStartStr = nextWeekStartDate.toISOString().split('T')[0];
+
+            try {
+                // 1. 取得本週所有已儲存的排班
+                const currentSchedules = Object.values(weeklyScheduleData);
+                if (currentSchedules.length === 0) {
+                    alert('本週無排班資料可複製。');
+                    return;
+                }
+
+                // 2. 刪除下一週所有現存的排班
+                const nextWeekResponse = await fetch(`${API.weeklySchedule}?weekStart=${nextWeekStartStr}`);
+                const nextWeekSchedules = await nextWeekResponse.json();
+                const deletePromises = nextWeekSchedules.map(sch => fetch(`${API.weeklySchedule}/${sch.id}`, { method: 'DELETE' }));
+                await Promise.all(deletePromises);
+
+                // 3. 建立新的排班資料並上傳
+                const schedulesForNextWeek = currentSchedules.map(({ patientId, slotId }) => ({
+                    patientId,
+                    slotId,
+                    weekStart: nextWeekStartStr
+                }));
+                const copyPromises = schedulesForNextWeek.map(sch => fetch(API.weeklySchedule, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(sch)
+                }));
+                await Promise.all(copyPromises);
+
+                alert('成功複製到下一週！將為您切換到下一週查看。');
+                changeWeek(7); // 自動跳到下一週
+            } catch (error) {
+                console.error("Copy to next week failed:", error);
+                alert('複製失敗，請檢查網路連線或稍後再試。');
+            }
+        };
+        // --- CHANGE END ---
+        
+        const changeWeek = (days) => { 
+            if (Object.keys(pendingChanges.toAdd).length > 0 || Object.keys(pendingChanges.toDelete).length > 0) {
+                if(!confirm('您有未儲存的變更，確定要切換日期嗎？所有變更將會遺失。')) return;
+            }
+            currentWeekStartDate.setDate(currentWeekStartDate.getDate() + days); 
+            updateWeekDisplay(); 
+            loadAllData(); 
+        };
 
         // Event Listeners
         document.getElementById('prev-week-btn').addEventListener('click', () => changeWeek(-7));
@@ -284,12 +373,14 @@
         document.getElementById('today-week-btn').addEventListener('click', () => { currentWeekStartDate = getStartOfWeek(new Date()); updateWeekDisplay(); loadAllData(); });
         document.getElementById('copy-to-next-week-btn').addEventListener('click', copyToNextWeek);
         document.getElementById('save-changes-btn').addEventListener('click', saveChangesToCloud);
-        document.getElementById('add-schedule-confirm-btn').addEventListener('click', handleAddSchedule);
+        // --- CHANGE START: 更新對話框事件監聽器 ---
+        document.getElementById('add-schedule-single-btn').addEventListener('click', () => handleConfirmAdd(true));
+        document.getElementById('add-schedule-freq-btn').addEventListener('click', () => handleConfirmAdd(false));
         document.getElementById('add-schedule-cancel-btn').addEventListener('click', () => addScheduleDialog.close());
-
+        // --- CHANGE END ---
+        
         // Initial Load
         updateWeekDisplay();
-        renderWeeklyScheduleTableFrame();
         loadAllData();
     });
     </script>
