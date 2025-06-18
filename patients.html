@@ -74,13 +74,13 @@
     <template id="opd-form-template"><form id="patient-form"><input type="hidden" id="patient-id"><input type="hidden" id="patient-type" value="opd"><div class="form-grid"><div class="form-field"><label for="name">姓名</label><input type="text" id="name" required></div><div class="form-field"><label for="medical-record-number">病歷號</label><input type="text" id="medical-record-number" required></div><div class="form-field"><label for="physician">收案醫師</label><select id="physician"></select></div><div class="form-field"><label for="frequency">透析頻率</label><select id="frequency"></select></div><div class="form-field"><label for="mode">透析模式</label><select id="mode"></select></div><div class="form-field"><label for="vasc-access">目前血管通路</label><select id="vasc-access"></select></div><div class="form-field"><label for="first-dialysis-date">首次透析日期</label><input type="date" id="first-dialysis-date"></div><div class="form-field"><label for="access-creation-date">通路建立日期</label><input type="date" id="access-creation-date"></div><fieldset class="form-group form-field-full"><legend>須注意疾病</legend><div id="disease-checkboxes" class="checkbox-container"></div></fieldset><div class="form-field form-field-full"><label for="remarks">備註</label><textarea id="remarks" rows="3"></textarea></div></div><div class="modal-footer"><button type="submit">儲存</button></div></form></template>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const API_BASE_URL = 'https://684eb206f0c9c9848d28d637.mockapi.io/patients';
+        const API_BASE_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/patients';
         const PHYSICIANS = ['廖丁瑩', '蔡宜潔', '蘇哲弘', '蔡亨政'];
         const FREQUENCIES = ['一三五', '二四六', '一四', '二五', '三六', '一五', '二六', '每周一次', '臨時'];
         const MODES = ['HD', 'SLED', 'CVVHDF', 'PP', 'DFPP'];
         const VASC_ACCESSES = ['Double lumen', 'PERM', '左手AVF', '右手AVF', '左手AVG', '右手AVG'];
         const DISEASES = ['HIV', 'RPR', 'HBV', 'HCV', '隔離'];
-        const DELETE_REASONS = ['出院', '死亡', '轉外院透析', '轉PD或其他'];
+        const DELETE_REASONS = ['出院', '死亡', '轉外院透析', '轉PD或其他', '誤key'];
         
         let allPatients = [];
         let currentSort = { column: 'createdAt', order: 'desc' };
