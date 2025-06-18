@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>門診週排班總表 (V1.4 - API更新版)</title>
     <style>
-        /* CSS inalterado */
+        /* CSS 內容與前一版相同 */
         :root {
             --green-bg: #e8f5e9; --green-text: #2e7d32;
             --blue-bg: #e3f2fd; --blue-text: #1565c0;
@@ -93,12 +93,10 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // --- CHANGE START: Update API URLs ---
         const API = {
             patients: 'https://6852ef850594059b23cfaa4f.mockapi.io/patients',
             weeklySchedule: 'https://6852ef850594059b23cfaa4f.mockapi.io/weekly_schedule'
         };
-        // --- CHANGE END ---
         const TOTAL_BEDS = 40;
         const SHIFTS = ['早班', '午班', '晚班'];
         const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
@@ -143,7 +141,7 @@
                 
                 renderWeeklyScheduleTable(); 
                 updateStatsToolbar();
-            } catch (error) { console.error("Failed to fetch data:", error); alert("讀取雲端資料失敗！"); }
+            } catch (error) { console.error("Failed to fetch data:", error); alert("讀取雲端資料失敗！請確認 MockAPI 專案下有 patients 和 weekly_schedule 兩個資源。"); }
         };
 
         const renderWeeklyScheduleTable = () => {
