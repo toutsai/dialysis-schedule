@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>洗腎室床位病人排程表 (V26.3 - 新病人標記)</title>
+    <title>洗腎室床位病人排程表 (V26.4 - API還原)</title>
     <style>
+        /* CSS is identical, so it's omitted for brevity. */
         body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .controls-panel { max-width: 1800px; margin: 0 auto 20px; padding: 15px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
         .controls-panel button { padding: 8px 15px; font-size: 1em; border-radius: 5px; border: 1px solid #ccc; background-color: #e9e9e9; cursor: pointer; transition: background-color 0.2s; }
@@ -69,16 +70,12 @@
         .patient-tag { border-left: 1px solid #e0e0e0; font-size: 0.8em; }
         .patient-tag:empty::before { content: "備註"; color: #aaa; font-style: italic; }
         .nurse-team-select:has(option[value=""]:checked) { background-color: #dcdcdc !important; }
-        
-        /* --- CHANGE START: New and updated tag colors --- */
         .patient-name.tag-chou, .peripheral-patient-name.tag-chou { background-color: #90caf9 !important; }
-        .patient-name.tag-new, .peripheral-patient-name.tag-new { background-color: #fff176 !important; } /* Yellow for "新" */
+        .patient-name.tag-new, .peripheral-patient-name.tag-new { background-color: #fff176 !important; }
         .patient-name.hospitalized, .peripheral-patient-name.hospitalized { background-color: #ffcdd2 !important; }
         .patient-name.tag-huan, .peripheral-patient-name.tag-huan { background-color: #e3f2fd !important; }
         .patient-name.tag-liang, .peripheral-patient-name.tag-liang { background-color: #ffcc80 !important; }
         .patient-name.tag-b, .peripheral-patient-name.tag-b { background-color: #fffde7 !important; }
-        /* --- CHANGE END --- */
-        
         .inpatient-sidebar { width: 240px; flex-shrink: 0; background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6; max-height: 80vh; display: flex; flex-direction: column;}
         .inpatient-sidebar h3 { margin-top: 0; text-align: center; border-bottom: 1px solid #dee2e6; padding-bottom: 10px; margin-bottom: 10px; }
         .filter-group { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
@@ -93,29 +90,7 @@
         #inpatient-list li .freq { font-size: 0.9em; color: #555; background-color: #e9ecef; padding: 2px 6px; border-radius: 10px; }
         
         @page { size: A4 landscape; margin: 0.5cm; }
-        @media print { 
-            body { padding: 0; background-color: #fff; font-size: 8pt; -webkit-print-color-adjust: exact; color-adjust: exact; } 
-            .controls-panel, .aisle, .status-indicator, #print-btn, #save-btn, #clear-all-btn, #copy-schedule-btn, #copy-source-date, .search-group, #today-btn, .date-nav-btn, .inpatient-sidebar { display: none !important; } 
-            .main-container { display: block; }
-            .date-navigator { display: flex; justify-content: space-between; align-items: center; width: 100%; margin: 0 0 5px 0; padding-bottom: 5px; border-bottom: 2px solid #000; } 
-            #current-date-display, #weekday-display { font-size: 1.5em; text-align: left; } 
-            #weekday-display { flex-grow: 1; } 
-            .shift-patient-count { display: flex !important; border-left: none; padding-left: 0; font-size: 1.1em; gap: 20px; flex-shrink: 0; } 
-            .dialysis-unit, .extra-sections { max-width: 100%; box-shadow: none; gap: 10px; } 
-            .dialysis-unit { grid-template-columns: 1fr 1fr; } 
-            .bed, .nursing-station, .peripheral-bed { border: 1px solid #000; box-shadow: none; page-break-inside: avoid; border-radius: 3px; } 
-            .bed-row, .peripheral-bed-container { gap: 5px; } .bed { min-height: 120px; } 
-            .shift-row, .peripheral-shift-row { font-size: 1em; min-height: 25px; align-items: center; } 
-            .shift-row { grid-template-columns: 20px 55px 1fr 30px; } 
-            .peripheral-shift-row { display: grid; grid-template-columns: 20px 55px 55px 1fr 30px; } 
-            .shift-label, .nurse-team-select, .patient-name, .peripheral-patient-name, .peripheral-bed-number, .patient-tag, .nurse-split-column { display: flex; align-items: center; justify-content: center; height: 100%; } 
-            .nurse-split-column { flex-direction: column; } .nurse-split-column .nurse-team-select { width: 100%; flex-grow: 1; } 
-            .patient-name:empty::before, .peripheral-bed-number:empty::before, .peripheral-patient-name:empty::before, .patient-tag:empty::before { content: ""; } 
-            .patient-name:empty, .peripheral-patient-name:empty { background-color: transparent !important; } 
-            select, .nurse-team-select:has(option[value=""]:checked) { -webkit-appearance: none; -moz-appearance: none; appearance: none; border: none; background: transparent !important; } 
-            .patient-name.tag-new, .peripheral-patient-name.tag-new, .patient-name.hospitalized, .peripheral-patient-name.hospitalized, .patient-name.tag-b, .peripheral-patient-name.tag-b, .patient-name.tag-chou, .peripheral-patient-name.tag-chou, .patient-name.tag-liang, .peripheral-patient-name.tag-liang, .patient-name.tag-huan, .peripheral-patient-name.tag-huan { background-color: inherit !important; border: 1px dotted #888; } 
-            .bed.hepatitis .bed-header { border-bottom: 2px double #000; background-color: #fff !important; } 
-        }
+        @media print { body { padding: 0; background-color: #fff; font-size: 8pt; -webkit-print-color-adjust: exact; color-adjust: exact; } .controls-panel, .aisle, .status-indicator, #print-btn, #save-btn, #clear-all-btn, #copy-schedule-btn, #copy-source-date, .search-group, #today-btn, .date-nav-btn, .inpatient-sidebar { display: none !important; } .main-container { display: block; } .date-navigator { display: flex; justify-content: space-between; align-items: center; width: 100%; margin: 0 0 5px 0; padding-bottom: 5px; border-bottom: 2px solid #000; } #current-date-display, #weekday-display { font-size: 1.5em; text-align: left; } #weekday-display { flex-grow: 1; } .shift-patient-count { display: flex !important; border-left: none; padding-left: 0; font-size: 1.1em; gap: 20px; flex-shrink: 0; } .dialysis-unit, .extra-sections { max-width: 100%; box-shadow: none; gap: 10px; } .dialysis-unit { grid-template-columns: 1fr 1fr; } .bed, .nursing-station, .peripheral-bed { border: 1px solid #000; box-shadow: none; page-break-inside: avoid; border-radius: 3px; } .bed-row, .peripheral-bed-container { gap: 5px; } .bed { min-height: 120px; } .shift-row, .peripheral-shift-row { font-size: 1em; min-height: 25px; align-items: center; } .shift-row { grid-template-columns: 20px 55px 1fr 30px; } .peripheral-shift-row { display: grid; grid-template-columns: 20px 55px 55px 1fr 30px; } .shift-label, .nurse-team-select, .patient-name, .peripheral-patient-name, .peripheral-bed-number, .patient-tag, .nurse-split-column { display: flex; align-items: center; justify-content: center; height: 100%; } .nurse-split-column { flex-direction: column; } .nurse-split-column .nurse-team-select { width: 100%; flex-grow: 1; } .patient-name:empty::before, .peripheral-bed-number:empty::before, .peripheral-patient-name:empty::before, .patient-tag:empty::before { content: ""; } .patient-name:empty, .peripheral-patient-name:empty { background-color: transparent !important; } select, .nurse-team-select:has(option[value=""]:checked) { -webkit-appearance: none; -moz-appearance: none; appearance: none; border: none; background: transparent !important; } .patient-name.tag-new, .peripheral-patient-name.tag-new, .patient-name.hospitalized, .peripheral-patient-name.hospitalized, .patient-name.tag-b, .peripheral-patient-name.tag-b, .patient-name.tag-chou, .peripheral-patient-name.tag-chou, .patient-name.tag-liang, .peripheral-patient-name.tag-liang, .patient-name.tag-huan, .peripheral-patient-name.tag-huan { background-color: inherit !important; border: 1px dotted #888; } .bed.hepatitis .bed-header { border-bottom: 2px double #000; background-color: #fff !important; } }
     </style>
 </head>
 <body>
@@ -172,7 +147,7 @@
     document.addEventListener('DOMContentLoaded', function() {
         const API = {
             schedules: 'https://684eb206f0c9c9848d28d637.mockapi.io/schedules',
-            patients: 'https://6852ef850594059b23cfaa4f.mockapi.io/patients'
+            patients: 'https://684eb206f0c9c9848d28d637.mockapi.io/patients'
         };
         let currentDate = new Date();
         let currentRecord = null;
@@ -257,7 +232,6 @@
 
         const updateShiftPatientCount = () => { let earlyCount = 0; let noonCount = 0; let lateCount = 0; document.querySelectorAll('.patient-name, .peripheral-patient-name').forEach(patientField => { if (patientField.textContent.trim() !== '') { const parentRow = patientField.closest('.shift-row, .peripheral-shift-row'); if (parentRow) { const shiftId = parentRow.dataset.shiftId; if (shiftId.includes('-早')) earlyCount++; else if (shiftId.includes('-午')) noonCount++; else if (shiftId.includes('-晚')) lateCount++; } } }); document.querySelectorAll('#early-shift-count').forEach(el => el.textContent = earlyCount); document.querySelectorAll('#noon-shift-count').forEach(el => el.textContent = noonCount); document.querySelectorAll('#late-shift-count').forEach(el => el.textContent = lateCount); };
         
-        // --- CHANGE START: Update checkTagStatus to include "新" and correct priority ---
         const checkTagStatus = (tagElement) => {
             const parentRow = tagElement.closest('.shift-row, .peripheral-shift-row');
             if (!parentRow) return;
@@ -281,7 +255,6 @@
                 }
             }
         };
-        // --- CHANGE END ---
         
         async function loadDataFromCloud(dateStr) {
             clearBoard();
@@ -364,7 +337,7 @@
                     const tagCell = row.querySelector('.patient-tag');
                     if(tagCell) {
                         tagCell.textContent = data.tag;
-                        checkTagStatus(tagCell); // Apply color on load
+                        checkTagStatus(tagCell);
                     }
                 }
                 if (row.classList.contains('split-shift')) { 
