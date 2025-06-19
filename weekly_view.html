@@ -3,15 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V2.7 - 統計列顯示修正)</title>
+    <title>門診週排班總表 (V2.8 - 住院排班高亮)</title>
     <style>
-        /* CSS is identical to the previous version, so it's omitted for brevity. */
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
             --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
             --border-color: #dee2e6;
             --hepatitis-bg: #fffde7;
             --sidebar-bg: #f8f9fa;
+            /* --- CHANGE START: Add highlight color --- */
+            --highlight-yellow: #fff59d;
+            /* --- CHANGE END --- */
         }
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: var(--sidebar-bg); margin: 0; padding: 20px; color: #212529; }
         .container { max-width: 1800px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.075); }
@@ -42,7 +44,13 @@
         .filter-group button { padding: 4px 8px; font-size: 0.8em; flex-grow: 1; }
         .filter-group button.active { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
         #inpatient-list { list-style-type: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
-        #inpatient-list li { background-color: #fff; border: 1px solid #e0e0e0; padding: 8px 12px; margin-bottom: 8px; border-radius: 5px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+        #inpatient-list li { background-color: #fff; border: 1px solid #e0e0e0; padding: 8px 12px; margin-bottom: 8px; border-radius: 5px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; transition: background-color 0.3s; }
+        /* --- CHANGE START: Add highlight style for scheduled inpatients --- */
+        #inpatient-list li.scheduled-inpatient {
+            background-color: var(--highlight-yellow);
+            border-left: 5px solid var(--primary-color);
+        }
+        /* --- CHANGE END --- */
         .patient-info-row { display: flex; justify-content: space-between; width: 100%; align-items: center; }
         #inpatient-list li .name { font-weight: bold; font-size: 1.1em; }
         #inpatient-list li .mrn { font-size: 0.85em; color: #6c757d; }
@@ -212,6 +220,25 @@
             }
         }
         
+        // --- CHANGE START: New helper function and modification to renderInpatientList ---
+        /**
+         * Checks if a patient is scheduled in the current week's view,
+         * considering both saved data and pending changes.
+         * @param {string} patientId - The ID of the patient to check.
+         * @returns {boolean} - True if the patient is scheduled, false otherwise.
+         */
+        function isPatientScheduledThisWeek(patientId) {
+            const currentScheduleState = { ...weeklyScheduleData, ...pendingChanges.toAdd };
+            
+            for (const schedule of Object.values(currentScheduleState)) {
+                // If this schedule entry belongs to the patient AND it's not marked for deletion
+                if (schedule.patientId === patientId && !pendingChanges.toDelete[schedule.id]) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
         function renderInpatientList() {
             let inpatients = allPatients.filter(p => p.status === 'ipd');
             
@@ -230,6 +257,12 @@
             } else {
                 inpatients.forEach(p => {
                     const li = document.createElement('li');
+                    
+                    // Add highlight class if the patient is scheduled
+                    if (isPatientScheduledThisWeek(p.id)) {
+                        li.classList.add('scheduled-inpatient');
+                    }
+                    
                     li.innerHTML = `
                         <div class="patient-info-row">
                             <span class="name">${p.name}</span>
@@ -243,6 +276,7 @@
                 });
             }
         }
+        // --- CHANGE END ---
 
         const renderWeeklyScheduleTableFrame = () => {
             const head = document.getElementById('weekly-schedule-head');
@@ -292,7 +326,6 @@
             });
         };
         
-        // --- CHANGE START: Corrected stats toolbar rendering ---
         const updateStatsToolbar = () => {
             const statsToolbar = document.getElementById('stats-toolbar');
             const dailyCounts = WEEKDAYS.map(() => ({ '早班': 0, '午班': 0, '晚班': 0 }));
@@ -312,7 +345,6 @@
                 `<div class="stat-item"><strong>${WEEKDAYS[dayIndex].slice(-1)}:</strong><div class="stat-shift-group"><span class="shift-early">早:${counts['早班']}</span><span class="shift-noon">午:${counts['午班']}</span><span class="shift-late">晚:${counts['晚班']}</span></div></div>`
             ).join('');
         };
-        // --- CHANGE END ---
         
         function isPatientScheduledOnDay(patientId, dayIndex) {
             const currentSchedule = { ...weeklyScheduleData, ...pendingChanges.toAdd };
@@ -436,7 +468,6 @@
             copyBtn.textContent = '複製中...';
 
             try {
-                // To be robust, fetch all schedules and filter on the client side
                 const allSchedulesRes = await fetch(API.weeklySchedule);
                 if (!allSchedulesRes.ok) throw new Error('無法獲取全部排班資料');
                 const allSchedulesArray = await allSchedulesRes.json();
