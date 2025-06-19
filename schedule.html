@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>洗腎室床位病人排程表 (V26.2 - 護理站位置修正)</title>
+    <title>洗腎室床位病人排程表 (V26.3 - 新病人標記)</title>
     <style>
-        /* CSS is identical, so it's omitted for brevity. */
         body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .controls-panel { max-width: 1800px; margin: 0 auto 20px; padding: 15px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
         .controls-panel button { padding: 8px 15px; font-size: 1em; border-radius: 5px; border: 1px solid #ccc; background-color: #e9e9e9; cursor: pointer; transition: background-color 0.2s; }
@@ -70,11 +69,16 @@
         .patient-tag { border-left: 1px solid #e0e0e0; font-size: 0.8em; }
         .patient-tag:empty::before { content: "備註"; color: #aaa; font-style: italic; }
         .nurse-team-select:has(option[value=""]:checked) { background-color: #dcdcdc !important; }
+        
+        /* --- CHANGE START: New and updated tag colors --- */
         .patient-name.tag-chou, .peripheral-patient-name.tag-chou { background-color: #90caf9 !important; }
+        .patient-name.tag-new, .peripheral-patient-name.tag-new { background-color: #fff176 !important; } /* Yellow for "新" */
         .patient-name.hospitalized, .peripheral-patient-name.hospitalized { background-color: #ffcdd2 !important; }
         .patient-name.tag-huan, .peripheral-patient-name.tag-huan { background-color: #e3f2fd !important; }
         .patient-name.tag-liang, .peripheral-patient-name.tag-liang { background-color: #ffcc80 !important; }
         .patient-name.tag-b, .peripheral-patient-name.tag-b { background-color: #fffde7 !important; }
+        /* --- CHANGE END --- */
+        
         .inpatient-sidebar { width: 240px; flex-shrink: 0; background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6; max-height: 80vh; display: flex; flex-direction: column;}
         .inpatient-sidebar h3 { margin-top: 0; text-align: center; border-bottom: 1px solid #dee2e6; padding-bottom: 10px; margin-bottom: 10px; }
         .filter-group { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
@@ -109,7 +113,7 @@
             .patient-name:empty::before, .peripheral-bed-number:empty::before, .peripheral-patient-name:empty::before, .patient-tag:empty::before { content: ""; } 
             .patient-name:empty, .peripheral-patient-name:empty { background-color: transparent !important; } 
             select, .nurse-team-select:has(option[value=""]:checked) { -webkit-appearance: none; -moz-appearance: none; appearance: none; border: none; background: transparent !important; } 
-            .patient-name.hospitalized, .peripheral-patient-name.hospitalized, .patient-name.tag-b, .peripheral-patient-name.tag-b, .patient-name.tag-chou, .peripheral-patient-name.tag-chou, .patient-name.tag-liang, .peripheral-patient-name.tag-liang, .patient-name.tag-huan, .peripheral-patient-name.tag-huan { background-color: inherit !important; border: 1px dotted #888; } 
+            .patient-name.tag-new, .peripheral-patient-name.tag-new, .patient-name.hospitalized, .peripheral-patient-name.hospitalized, .patient-name.tag-b, .peripheral-patient-name.tag-b, .patient-name.tag-chou, .peripheral-patient-name.tag-chou, .patient-name.tag-liang, .peripheral-patient-name.tag-liang, .patient-name.tag-huan, .peripheral-patient-name.tag-huan { background-color: inherit !important; border: 1px dotted #888; } 
             .bed.hepatitis .bed-header { border-bottom: 2px double #000; background-color: #fff !important; } 
         }
     </style>
@@ -184,7 +188,7 @@
         const lateOptionsHTML = `<option value=""></option>` + lateTeams.map(team => `<option value="${team}">${team}組</option>`).join('');
         const allOptionsHTML = `<option value=""></option>` + allTeams.map(team => `<option value="${team}">${team}組</option>`).join('');
         const layoutData = { leftWingRows: [['空', 32, 31], [33, 35, 36], [39, 38, 37], [51, 52, 53], [57, 56, 55], [58, 59, 61], [65, 63, 62]], rightWingRows: [[29, 28, 27], [23, 25, 26], [22, 21, 19], [16, 17, 18], [15, 13, 12], [8, 9, 11], [7, 6, 5], [1, 2, 3]] };
-        const aisleSideBeds = [1, 7, 8, 15, 16, 22, 23, 29, 31, 36, 37, 53, 55, 61, 62];
+        const aisleSideBeds = [1, 7, 8, 15, 16, 22, 23, 29, 31, 36, 37, 53, 55, 61, 62, 65];
         const hepatitisBeds = ['空', 31, 32, 33, 35, 36];
         const peripheralBedCount = 6;
         const leftWing = document.getElementById('left-wing');
@@ -215,13 +219,10 @@
             generateWingLayout(leftWing, layoutData.leftWingRows, 'left-wing-bed');
             generateWingLayout(rightWing, layoutData.rightWingRows, 'right-wing-bed');
             
-            // --- CHANGE START: Corrected Nursing Station placement logic ---
-            // The nursing station is now its own row, added to the end of the left wing container
             const nursingStationRow = document.createElement('div'); 
             nursingStationRow.className = 'bed-row'; 
             nursingStationRow.innerHTML = '<div class="nursing-station">護理站</div>';
             leftWing.appendChild(nursingStationRow);
-            // --- CHANGE END ---
             
             peripheralContainer.innerHTML = '';
             for (let i = 1; i <= peripheralBedCount; i++) { 
@@ -247,7 +248,7 @@
             document.querySelectorAll('.nurse-team-select').forEach(s => { s.value = ''; s.title=''; });
             document.querySelectorAll('div[contenteditable="true"]').forEach(d => d.textContent = '');
             document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight'));
-            document.querySelectorAll('.hospitalized, .tag-chou, .tag-liang, .tag-b, .tag-huan').forEach(el => el.classList.remove('hospitalized', 'tag-chou', 'tag-liang', 'tag-b', 'tag-huan'));
+            document.querySelectorAll('.tag-chou, .tag-new, .hospitalized, .tag-huan, .tag-liang, .tag-b').forEach(el => el.classList.remove('tag-chou', 'tag-new', 'hospitalized', 'tag-huan', 'tag-liang', 'tag-b'));
             currentRecord = null;
             updateShiftPatientCount();
             setStatus('新排程，尚未儲存', 'unsaved');
@@ -255,7 +256,32 @@
         }
 
         const updateShiftPatientCount = () => { let earlyCount = 0; let noonCount = 0; let lateCount = 0; document.querySelectorAll('.patient-name, .peripheral-patient-name').forEach(patientField => { if (patientField.textContent.trim() !== '') { const parentRow = patientField.closest('.shift-row, .peripheral-shift-row'); if (parentRow) { const shiftId = parentRow.dataset.shiftId; if (shiftId.includes('-早')) earlyCount++; else if (shiftId.includes('-午')) noonCount++; else if (shiftId.includes('-晚')) lateCount++; } } }); document.querySelectorAll('#early-shift-count').forEach(el => el.textContent = earlyCount); document.querySelectorAll('#noon-shift-count').forEach(el => el.textContent = noonCount); document.querySelectorAll('#late-shift-count').forEach(el => el.textContent = lateCount); };
-        const checkTagStatus = (tagElement) => { const parentRow = tagElement.closest('.shift-row, .peripheral-shift-row'); if (!parentRow) return; const patientCell = parentRow.querySelector('.patient-name, .peripheral-patient-name'); if (patientCell) { const tagText = tagElement.textContent.toUpperCase(); patientCell.classList.remove('tag-chou', 'hospitalized', 'tag-huan', 'tag-liang', 'tag-b'); if (tagText.includes('抽')) { patientCell.classList.add('tag-chou'); } else if (tagText.includes('住')) { patientCell.classList.add('hospitalized'); } else if (tagText.includes('換')) { patientCell.classList.add('tag-huan'); } else if (tagText.includes('兩')) { patientCell.classList.add('tag-liang'); } else if (tagText.includes('B')) { patientCell.classList.add('tag-b'); } } };
+        
+        // --- CHANGE START: Update checkTagStatus to include "新" and correct priority ---
+        const checkTagStatus = (tagElement) => {
+            const parentRow = tagElement.closest('.shift-row, .peripheral-shift-row');
+            if (!parentRow) return;
+            const patientCell = parentRow.querySelector('.patient-name, .peripheral-patient-name');
+            if (patientCell) {
+                const tagText = tagElement.textContent.toUpperCase();
+                patientCell.className = patientCell.className.split(' ').filter(c => !c.startsWith('tag-') && c !== 'hospitalized').join(' ');
+
+                if (tagText.includes('抽')) {
+                    patientCell.classList.add('tag-chou');
+                } else if (tagText.includes('新')) {
+                    patientCell.classList.add('tag-new');
+                } else if (tagText.includes('住')) {
+                    patientCell.classList.add('hospitalized');
+                } else if (tagText.includes('換')) {
+                    patientCell.classList.add('tag-huan');
+                } else if (tagText.includes('兩')) {
+                    patientCell.classList.add('tag-liang');
+                } else if (tagText.includes('B')) {
+                    patientCell.classList.add('tag-b');
+                }
+            }
+        };
+        // --- CHANGE END ---
         
         async function loadDataFromCloud(dateStr) {
             clearBoard();
@@ -336,7 +362,10 @@
                 }
                 if(data.tag) {
                     const tagCell = row.querySelector('.patient-tag');
-                    if(tagCell) tagCell.textContent = data.tag;
+                    if(tagCell) {
+                        tagCell.textContent = data.tag;
+                        checkTagStatus(tagCell); // Apply color on load
+                    }
                 }
                 if (row.classList.contains('split-shift')) { 
                     if(data.nurse_in) row.querySelector('.nurse-in').value = data.nurse_in; 
@@ -345,7 +374,6 @@
                     if(data.nurse) row.querySelector('.nurse-team-select').value = data.nurse; 
                 } 
             }); 
-            document.querySelectorAll('.patient-tag').forEach(checkTagStatus);
             updateShiftPatientCount();
         }
 
