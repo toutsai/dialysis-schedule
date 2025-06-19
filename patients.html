@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>透析病人管理系統 (V2.0 - 最終穩定重構版)</title>
+    <title>透析病人管理系統 (V2.1 - API更新版)</title>
     <style>
-        /* CSS 與 V1.9 完全相同 */
+        /* CSS inalterado */
         :root { --green-bg: #e8f5e9; --green-text: #2e7d32; --blue-bg: #e3f2fd;  --blue-text: #1565c0; --orange-bg: #fff3e0; --orange-text: #ef6c00; --grey-bg: #f5f5f5; --grey-text: #616161; --red-text: #c62828; }
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f9f9f9; margin: 0; padding: 20px; }
         .container { max-width: 1400px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -74,13 +74,15 @@
     <template id="opd-form-template"><form id="patient-form"><input type="hidden" id="patient-id"><input type="hidden" id="patient-type" value="opd"><div class="form-grid"><div class="form-field"><label for="name">姓名</label><input type="text" id="name" required></div><div class="form-field"><label for="medical-record-number">病歷號</label><input type="text" id="medical-record-number" required></div><div class="form-field"><label for="physician">收案醫師</label><select id="physician"></select></div><div class="form-field"><label for="frequency">透析頻率</label><select id="frequency"></select></div><div class="form-field"><label for="mode">透析模式</label><select id="mode"></select></div><div class="form-field"><label for="vasc-access">目前血管通路</label><select id="vasc-access"></select></div><div class="form-field"><label for="first-dialysis-date">首次透析日期</label><input type="date" id="first-dialysis-date"></div><div class="form-field"><label for="access-creation-date">通路建立日期</label><input type="date" id="access-creation-date"></div><fieldset class="form-group form-field-full"><legend>須注意疾病</legend><div id="disease-checkboxes" class="checkbox-container"></div></fieldset><div class="form-field form-field-full"><label for="remarks">備註</label><textarea id="remarks" rows="3"></textarea></div></div><div class="modal-footer"><button type="submit">儲存</button></div></form></template>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const API_BASE_URL = 'https://684eb206f0c9c9848d28d637.mockapi.io/patients';
+        // --- CHANGE START: Update API URL ---
+        const API_BASE_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/patients';
+        // --- CHANGE END ---
         const PHYSICIANS = ['廖丁瑩', '蔡宜潔', '蘇哲弘', '蔡亨政'];
         const FREQUENCIES = ['一三五', '二四六', '一四', '二五', '三六', '一五', '二六', '每周一次', '臨時'];
         const MODES = ['HD', 'SLED', 'CVVHDF', 'PP', 'DFPP'];
         const VASC_ACCESSES = ['Double lumen', 'PERM', '左手AVF', '右手AVF', '左手AVG', '右手AVG'];
         const DISEASES = ['HIV', 'RPR', 'HBV', 'HCV', '隔離'];
-        const DELETE_REASONS = ['出院', '死亡', '轉外院透析', '轉PD或其他'];
+        const DELETE_REASONS = ['出院', '死亡', '轉外院透析', '轉PD或其他', '作廢'];
         
         let allPatients = [];
         let currentSort = { column: 'createdAt', order: 'desc' };
@@ -171,7 +173,7 @@
             try {
                 const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patientData) });
                 if (!response.ok) throw new Error('Save error');
-                await fetchAllPatients(); // 操作成功後，重新從伺服器獲取完整列表，確保資料同步
+                await fetchAllPatients();
                 closeModal();
             } catch (error) { console.error("Save failed:", error); alert("儲存失敗！"); }
         };
@@ -188,7 +190,6 @@
         const restorePatient = (id) => { const patient = allPatients.find(p => p.id === id); if (patient && confirm(`確定要將病人「${patient.name}」復原到「${patient.originalStatus === 'ipd' ? '住院' : '門診'}」列表嗎？`)) updatePatientField(id, { isDeleted: false, status: patient.originalStatus, deleteReason: null, deletedAt: null }); };
         const deletePatient = (id) => { const optionsContainer = document.getElementById('delete-reason-options'); optionsContainer.innerHTML = DELETE_REASONS.map(reason => `<button value="${reason}">${reason}</button>`).join(''); const handleReasonSelection = (event) => { const selectedReason = event.target.value; if(selectedReason && selectedReason !== 'cancel') { archivePatient(id, selectedReason); } deleteDialog.close(); }; optionsContainer.addEventListener('click', handleReasonSelection, { once: true }); document.getElementById('delete-cancel-btn').addEventListener('click', () => deleteDialog.close(), { once: true }); deleteDialog.showModal(); };
         
-        // --- Event Listeners using Event Delegation ---
         document.querySelector('.container').addEventListener('click', (e) => {
             const target = e.target;
             const action = target.dataset.action;
