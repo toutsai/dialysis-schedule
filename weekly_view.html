@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V2.4 - 最終修正版)</title>
+    <title>門診週排班總表 (V2.5 - 介面優化版)</title>
     <style>
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
@@ -25,7 +25,20 @@
         #copy-to-next-week-btn:disabled { background-color: #6c757d; border-color: #6c757d; cursor: not-allowed; }
         .status-indicator { font-weight: bold; color: var(--danger-color); }
         .status-text { font-weight: bold; color: #6c757d; margin-left: auto; margin-right: 15px; }
-        .stats-toolbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 10px; padding: 10px; background-color: var(--sidebar-bg); border-radius: 5px; margin-bottom: 20px; }
+        
+        /* --- CHANGE START: Make stats toolbar a single scrollable row --- */
+        .stats-toolbar { 
+            display: flex;
+            gap: 20px;
+            padding: 10px;
+            background-color: var(--sidebar-bg);
+            border-radius: 5px;
+            margin-bottom: 20px;
+            overflow-x: auto; /* Allow horizontal scrolling */
+            white-space: nowrap; /* Prevent items from wrapping */
+        }
+        /* --- CHANGE END --- */
+
         .stat-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 5px; background-color: #fff; border: 1px solid #e0e0e0; }
         .stat-item strong { font-size: 1.1em; }
         .stat-shift-group { display: flex; gap: 8px; }
@@ -35,15 +48,36 @@
         .stat-shift-group .shift-late { background-color: #17a2b8; }
         .main-content { display: flex; gap: 20px; }
         .schedule-area { flex-grow: 1; }
-        .inpatient-sidebar { width: 250px; flex-shrink: 0; background-color: var(--sidebar-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); max-height: calc(75vh + 20px); display: flex; flex-direction: column;}
+        .inpatient-sidebar { width: 280px; flex-shrink: 0; background-color: var(--sidebar-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); max-height: calc(75vh + 20px); display: flex; flex-direction: column;}
         .inpatient-sidebar h3 { margin-top: 0; text-align: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 10px; }
         .filter-group { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
         .filter-group button { padding: 4px 8px; font-size: 0.8em; flex-grow: 1; }
         .filter-group button.active { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
         #inpatient-list { list-style-type: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
-        #inpatient-list li { background-color: #fff; border: 1px solid #e0e0e0; padding: 8px 12px; margin-bottom: 8px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; }
-        #inpatient-list li .name { font-weight: bold; }
+        
+        /* --- CHANGE START: New styles for inpatient list items --- */
+        #inpatient-list li { 
+            background-color: #fff; 
+            border: 1px solid #e0e0e0; 
+            padding: 8px 12px; 
+            margin-bottom: 8px; 
+            border-radius: 5px; 
+            display: flex; 
+            flex-direction: column; /* Arrange items vertically */
+            align-items: flex-start; /* Align to the left */
+            gap: 4px; /* Space between rows */
+        }
+        .patient-info-row {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            align-items: center;
+        }
+        #inpatient-list li .name { font-weight: bold; font-size: 1.1em; }
+        #inpatient-list li .mrn { font-size: 0.85em; color: #6c757d; }
         #inpatient-list li .freq { font-size: 0.9em; color: #555; background-color: #e9ecef; padding: 2px 6px; border-radius: 10px; }
+        /* --- CHANGE END --- */
+        
         .table-wrapper { max-height: calc(75vh + 20px); overflow: auto; }
         .weekly-schedule-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .weekly-schedule-table th, .weekly-schedule-table td { border: 1px solid var(--border-color); padding: 4px; text-align: center; vertical-align: middle; height: 65px; }
@@ -94,14 +128,12 @@
             </div>
             <aside class="inpatient-sidebar">
                 <h3>本週住院病人</h3>
-                <!-- --- CHANGE START: Filter buttons --- -->
                 <div class="filter-group">
                     <button data-filter="all" class="active">全部</button>
                     <button data-filter="135">一三五</button>
                     <button data-filter="246">二四六</button>
                     <button data-filter="other">其他</button>
                 </div>
-                <!-- --- CHANGE END --- -->
                 <ul id="inpatient-list"></ul>
             </aside>
         </div>
@@ -130,7 +162,7 @@
         let weeklyScheduleData = {};
         let currentWeekStartDate = getStartOfWeek(new Date());
         let pendingChanges = { toAdd: {}, toDelete: {} };
-        let inpatientFilter = 'all'; // Default filter
+        let inpatientFilter = 'all';
 
         const weekDisplay = document.getElementById('week-display');
         const addScheduleDialog = document.getElementById('add-schedule-dialog');
@@ -211,6 +243,7 @@
             }
         }
         
+        // --- CHANGE START: Update inpatient list rendering ---
         function renderInpatientList() {
             let inpatients = allPatients.filter(p => p.status === 'ipd');
             
@@ -229,11 +262,20 @@
             } else {
                 inpatients.forEach(p => {
                     const li = document.createElement('li');
-                    li.innerHTML = `<span class="name">${p.name}</span> <span class="freq">${p.frequency || '未設定'}</span>`;
+                    li.innerHTML = `
+                        <div class="patient-info-row">
+                            <span class="name">${p.name}</span>
+                            <span class="freq">${p.frequency || '未設定'}</span>
+                        </div>
+                        <div class="patient-info-row">
+                            <span class="mrn">(${p.medicalRecordNumber || '無病歷號'})</span>
+                        </div>
+                    `;
                     inpatientList.appendChild(li);
                 });
             }
         }
+        // --- CHANGE END ---
 
         const renderWeeklyScheduleTableFrame = () => {
             const head = document.getElementById('weekly-schedule-head');
@@ -311,6 +353,7 @@
             const slotId = addScheduleDialog.dataset.slotId; 
             const patientId = patientSelect.value; 
             if (!patientId) return alert('請選擇一位病人！'); 
+            
             const patient = allPatients.find(p => p.id === patientId); 
             const fillType = document.querySelector('input[name="fill-type"]:checked').value; 
             const freq = patient.frequency; 
@@ -367,7 +410,6 @@
             }
         };
 
-        // --- CHANGE START: Restoring and fixing the functions ---
         const saveChangesToCloud = async () => { 
             if (Object.keys(pendingChanges.toAdd).length === 0 && Object.keys(pendingChanges.toDelete).length === 0) {
                  alert('沒有需要儲存的變更。');
@@ -407,11 +449,9 @@
             copyBtn.textContent = '複製中...';
 
             try {
-                const allSchedulesRes = await fetch(API.weeklySchedule);
-                if (!allSchedulesRes.ok) throw new Error('無法獲取全部排班資料');
-                const allSchedulesArray = await allSchedulesRes.json();
-                
-                const nextWeekSchedules = allSchedulesArray.filter(s => s.weekStart === nextWeekStartStr);
+                const nextWeekResponse = await fetch(`${API.weeklySchedule}?weekStart=${nextWeekStartStr}`);
+                if (!nextWeekResponse.ok) throw new Error('無法獲取下週資料');
+                const nextWeekSchedules = await nextWeekResponse.json();
 
                 if (nextWeekSchedules.length > 0) {
                     if (!confirm('下一週已有排班資料，確定要覆蓋嗎？')) throw new Error('操作已取消');
@@ -433,7 +473,7 @@
                     await fetch(API.weeklySchedule, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sch) });
                 }
 
-                alert('複製成功！現在將跳轉到下一週。');
+                alert('成功複製到下一週！現在將跳轉到下一週。');
                 changeWeek(7, true);
 
             } catch (error) {
@@ -456,7 +496,6 @@
             currentWeekStartDate = newDate;
             loadAllData();
         };
-        // --- CHANGE END ---
 
         document.getElementById('prev-week-btn').addEventListener('click', () => changeWeek(-7));
         document.getElementById('next-week-btn').addEventListener('click', () => changeWeek(7));
@@ -466,7 +505,6 @@
         document.getElementById('clear-ipd-btn').addEventListener('click', clearInpatientSchedules);
         document.getElementById('add-schedule-confirm-btn').addEventListener('click', handleAddSchedule);
         document.getElementById('add-schedule-cancel-btn').addEventListener('click', () => addScheduleDialog.close());
-        // --- CHANGE START: Add filter button event listener ---
         filterGroup.addEventListener('click', (e) => {
             if (e.target.tagName === 'BUTTON') {
                 filterGroup.querySelector('.active').classList.remove('active');
@@ -475,7 +513,6 @@
                 renderInpatientList();
             }
         });
-        // --- CHANGE END ---
 
         initialize();
     });
