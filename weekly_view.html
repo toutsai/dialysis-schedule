@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V1.6 - 複製功能修正)</title>
+    <title>門診週排班總表 (V1.7 - 日期導航修正)</title>
     <style>
         /* CSS 內容無變動 */
         :root {
@@ -22,7 +22,7 @@
         #week-display { font-size: 1.5em; font-weight: bold; color: #343a40; }
         #save-changes-btn { background-color: var(--success-color); color: white; border-color: var(--success-color); }
         #copy-to-next-week-btn { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
-        #copy-to-next-week-btn:disabled { background-color: #6c757d; border-color: #6c757d; cursor: not-allowed; } /* Added disabled style */
+        #copy-to-next-week-btn:disabled { background-color: #6c757d; border-color: #6c757d; cursor: not-allowed; }
         .status-indicator { font-weight: bold; color: var(--danger-color); }
         .stats-toolbar { display: flex; justify-content: flex-start; gap: 20px; padding: 10px; background-color: #f8f9fa; border-radius: 5px; margin-bottom: 20px; flex-wrap: wrap; }
         .stat-item { display: flex; align-items: center; gap: 8px; }
@@ -149,14 +149,14 @@
                     fetch(API.patients),
                     fetch(`${API.weeklySchedule}?weekStart=${getWeekStartString(currentWeekStartDate)}`)
                 ]);
-                if (!patientsRes.ok || !scheduleRes.ok) throw new Error('Network error');
+                if (!patientsRes.ok || !scheduleRes.ok) throw new Error('Network error during data fetching.');
                 allPatients = (await patientsRes.json()).filter(p => !p.isDeleted);
                 const scheduleArray = await scheduleRes.json();
                 weeklyScheduleData = scheduleArray.reduce((acc, item) => { acc[item.slotId] = item; return acc; }, {});
                 
                 renderWeeklyScheduleTable(); 
                 updateStatsToolbar();
-            } catch (error) { console.error("Failed to fetch data:", error); alert("讀取雲端資料失敗！請確認 MockAPI 專案下有 patients 和 weekly_schedule 兩個資源。"); }
+            } catch (error) { console.error("Failed to fetch data:", error); alert("讀取雲端資料失敗！請確認 MockAPI 專案下有 patients 和 weekly_schedule 兩個資源，且網路連線正常。"); }
         };
 
         const renderWeeklyScheduleTable = () => {
@@ -190,6 +190,7 @@
             addSlotEventListeners();
         };
 
+        // ... [The rest of the functions from populateWeeklySchedule to saveChangesToCloud remain unchanged] ...
         const populateWeeklySchedule = () => {
             document.querySelectorAll('.schedule-slot').forEach(slot => {
                 const slotId = slot.dataset.slotId;
@@ -328,7 +329,6 @@
             }
         };
 
-        // --- CHANGE START: Modify copyToNextWeek to run sequentially ---
         const copyToNextWeek = async () => {
             if (Object.keys(pendingChanges.toAdd).length > 0 || Object.keys(pendingChanges.toDelete).length > 0) {
                 alert('請先儲存目前變更，再執行複製操作。');
@@ -347,10 +347,11 @@
                 const currentSchedules = Object.values(weeklyScheduleData);
                 if (currentSchedules.length === 0) {
                     alert('本週無排班資料可複製。');
-                    return; // Return added here
+                    copyBtn.disabled = false; // Re-enable button
+                    copyBtn.textContent = '複製到下一週';
+                    return;
                 }
 
-                // Step 1: Fetch and Delete existing schedules for the next week sequentially
                 const nextWeekResponse = await fetch(`${API.weeklySchedule}?weekStart=${nextWeekStartStr}`);
                 if (!nextWeekResponse.ok) throw new Error('無法獲取下週資料');
                 const nextWeekSchedules = await nextWeekResponse.json();
@@ -365,7 +366,6 @@
                     }
                 }
 
-                // Step 2: Create new schedules for the next week sequentially
                 const schedulesForNextWeek = currentSchedules.map(({ patientId, slotId }) => ({
                     patientId,
                     slotId,
@@ -390,25 +390,37 @@
                 console.error("Copy to next week failed:", error);
                 alert(`複製失敗：${error.message}`);
             } finally {
-                // Always re-enable the button and restore text
                 copyBtn.disabled = false;
                 copyBtn.textContent = '複製到下一週';
             }
         };
-        // --- CHANGE END ---
         
+        // --- CHANGE START: Refactor changeWeek and today button handler ---
         const changeWeek = (days, force = false) => { 
             if (!force && (Object.keys(pendingChanges.toAdd).length > 0 || Object.keys(pendingChanges.toDelete).length > 0)) {
                 if(!confirm('您有未儲存的變更，確定要切換日期嗎？所有變更將會遺失。')) return;
             }
-            currentWeekStartDate.setDate(currentWeekStartDate.getDate() + days); 
+            
+            // Create a new Date object instead of mutating the old one
+            const newDate = new Date(currentWeekStartDate);
+            newDate.setDate(newDate.getDate() + days);
+            currentWeekStartDate = newDate; // Re-assign the global variable
+            
             updateWeekDisplay(); 
             loadAllData(); 
         };
 
         document.getElementById('prev-week-btn').addEventListener('click', () => changeWeek(-7));
         document.getElementById('next-week-btn').addEventListener('click', () => changeWeek(7));
-        document.getElementById('today-week-btn').addEventListener('click', () => { currentWeekStartDate = getStartOfWeek(new Date()); changeWeek(0, true); });
+        document.getElementById('today-week-btn').addEventListener('click', () => {
+            // Simplified and robust logic for going to today's week
+            if (!confirm('您有未儲存的變更，確定要切換日期嗎？所有變更將會遺失。')) return;
+            currentWeekStartDate = getStartOfWeek(new Date());
+            updateWeekDisplay();
+            loadAllData();
+        });
+        // --- CHANGE END ---
+
         copyBtn.addEventListener('click', copyToNextWeek);
         document.getElementById('save-changes-btn').addEventListener('click', saveChangesToCloud);
         document.getElementById('add-schedule-single-btn').addEventListener('click', () => handleConfirmAdd(true));
