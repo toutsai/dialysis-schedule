@@ -168,11 +168,15 @@
             <ul id="inpatient-list"></ul>
         </aside>
     </div>
+       <!-- HTML 部分保持不變，只需修改 <script> 標籤內的 JavaScript -->
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const API = {
             schedules: 'https://6852ef850594059b23cfaa4f.mockapi.io/schedules',
-            patients: 'https://6852ef850594059b23cfaa4f.mockapi.io/patients'
+            patients: 'https://6852ef850594059b23cfaa4f.mockapi.io/patients',
+            // --- CHANGE START: 新增週排班的 API 端點 ---
+            weeklySchedule: 'https://6852ef850594059b23cfaa4f.mockapi.io/weekly_schedule'
+            // --- CHANGE END ---
         };
         let currentDate = new Date();
         let currentRecord = null;
@@ -197,6 +201,19 @@
         
         const inpatientList = document.getElementById('inpatient-list');
         const filterGroup = document.querySelector('.filter-group');
+
+        // --- CHANGE START: 新增輔助函式與對應表 ---
+        // 從 weekly_view.html 複製過來的輔助函式，用來計算週一的日期
+        const getStartOfWeek = (date) => {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1); // 將週日(0)視為第7天
+            return new Date(new Date(d.setDate(diff)).setHours(0, 0, 0, 0));
+        }
+
+        // 用來將每日排程的班別文字對應到週排班的索引
+        const shiftToIndexMap = { '早': 0, '午': 1, '晚': 2 };
+        // --- CHANGE END ---
 
         const formatDate = (date) => {
             const year = date.getFullYear();
@@ -257,7 +274,6 @@
 
         const updateShiftPatientCount = () => { let earlyCount = 0; let noonCount = 0; let lateCount = 0; document.querySelectorAll('.patient-name, .peripheral-patient-name').forEach(patientField => { if (patientField.textContent.trim() !== '') { const parentRow = patientField.closest('.shift-row, .peripheral-shift-row'); if (parentRow) { const shiftId = parentRow.dataset.shiftId; if (shiftId.includes('-早')) earlyCount++; else if (shiftId.includes('-午')) noonCount++; else if (shiftId.includes('-晚')) lateCount++; } } }); document.querySelectorAll('#early-shift-count').forEach(el => el.textContent = earlyCount); document.querySelectorAll('#noon-shift-count').forEach(el => el.textContent = noonCount); document.querySelectorAll('#late-shift-count').forEach(el => el.textContent = lateCount); };
         
-        // --- CHANGE START: Update checkTagStatus to include "新" and correct priority ---
         const checkTagStatus = (tagElement) => {
             const parentRow = tagElement.closest('.shift-row, .peripheral-shift-row');
             if (!parentRow) return;
@@ -281,12 +297,13 @@
                 }
             }
         };
-        // --- CHANGE END ---
-        
+
+        // --- CHANGE START: 大幅修改 loadDataFromCloud 與新增 populateFromWeeklySchedule 函式 ---
         async function loadDataFromCloud(dateStr) {
             clearBoard();
             setStatus('讀取中...', 'loading');
             try {
+                // 並行抓取每日排程和所有病人資料
                 const [scheduleResponse, patientsResponse] = await Promise.all([
                     fetch(`${API.schedules}?date=${dateStr}`),
                     fetch(API.patients)
@@ -297,23 +314,94 @@
                 }
                 
                 const scheduleData = await scheduleResponse.json();
+                // 過濾掉已刪除的病人，並存到全域變數
                 allPatients = (await patientsResponse.json()).filter(p => !p.isDeleted);
 
                 if (scheduleData.length > 0) {
+                    // 如果當天已有儲存的排程，直接載入
                     currentRecord = scheduleData[0];
                     renderDataToUI(currentRecord.schedule || {});
                     setStatus('資料已從雲端載入', 'saved');
                 } else {
-                    setStatus('本日無雲端資料，可建立新排程', 'unsaved');
+                    // 如果當天沒有排程，從週排班表自動帶入
+                    setStatus('本日無資料，嘗試從週排班匯入...', 'loading');
+                    await populateFromWeeklySchedule(new Date(dateStr + 'T00:00:00'));
                 }
+                // 無論如何都更新住院病人列表
                 renderInpatientList();
 
             } catch (error) {
-                console.error('從雲端讀取資料失敗:', error);
+                console.error('讀取資料失敗:', error);
                 setStatus('讀取失敗，請檢查網路連線', 'error');
-                renderInpatientList();
+                renderInpatientList(); // 即使失敗也要顯示病人列表
             }
         }
+
+        async function populateFromWeeklySchedule(date) {
+            // 排除週日
+            const dayOfWeek = date.getDay();
+            if (dayOfWeek === 0) {
+                setStatus('週日為休息日，無排班', 'saved');
+                return;
+            }
+            // 週排班的星期索引是 0=一, 1=二 ... 5=六
+            const weeklyDayIndex = dayOfWeek - 1;
+
+            const weekStartDate = getStartOfWeek(date);
+            const weekStartStr = formatDate(weekStartDate);
+
+            try {
+                const response = await fetch(`${API.weeklySchedule}?weekStart=${weekStartStr}`);
+                if (!response.ok) throw new Error('無法取得週排班資料');
+                
+                const weeklySchedules = await response.json();
+                
+                if (weeklySchedules.length === 0) {
+                    setStatus('找不到對應的週排班資料', 'unsaved');
+                    return;
+                }
+
+                // 建立一個 slotId -> patientId 的映射，方便快速查找
+                const patientMap = new Map();
+                weeklySchedules.forEach(item => {
+                    patientMap.set(item.slotId, item.patientId);
+                });
+
+                // 遍歷畫面上的所有床位與班次
+                document.querySelectorAll('.shift-row').forEach(row => {
+                    const shiftId = row.dataset.shiftId; // e.g., "bed-31-早"
+                    const parts = shiftId.split('-'); // ["bed", "31", "早"]
+                    
+                    if (parts.length !== 3 || parts[0] !== 'bed') return;
+                    
+                    const bedNumber = parts[1];
+                    const shiftName = parts[2];
+                    const shiftIndex = shiftToIndexMap[shiftName];
+                    
+                    // 組成週排班的 slotId, e.g., "31-0-4" (床號-班別索引-星期索引)
+                    const weeklySlotId = `${bedNumber}-${shiftIndex}-${weeklyDayIndex}`;
+                    
+                    if (patientMap.has(weeklySlotId)) {
+                        const patientId = patientMap.get(weeklySlotId);
+                        const patient = allPatients.find(p => p.id === patientId);
+                        
+                        if (patient) {
+                            const patientCell = row.querySelector('.patient-name');
+                            patientCell.textContent = patient.name;
+                        }
+                    }
+                });
+                
+                updateShiftPatientCount();
+                setStatus('已從週排班自動匯入，請指派護理師並儲存', 'unsaved');
+
+            } catch(error) {
+                console.error("從週排班匯入失敗:", error);
+                setStatus('從週排班匯入失敗', 'error');
+            }
+        }
+        // --- CHANGE END ---
+
 
         function renderInpatientList() {
             let inpatients = allPatients.filter(p => p.status === 'ipd' && !p.isDeleted);
