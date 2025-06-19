@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V2.0 - 穩定重構版)</title>
+    <title>門診週排班總表 (V2.1 - 功能增強版)</title>
     <style>
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
@@ -50,7 +50,18 @@
         .schedule-slot.filled.status-ipd { background-color: var(--blue-bg); }
         .slot-patient-name { font-weight: bold; }
         .slot-patient-mode { font-size: 0.9em; color: #555; }
-        .disease-tag { color: var(--red-text); font-weight: bold; margin-left: 4px;}
+        /* --- CHANGE START: Disease tag style update --- */
+        .disease-tag { 
+            color: var(--danger-color); 
+            font-weight: bold; 
+            margin-left: 5px;
+            font-size: 0.9em;
+            padding: 1px 4px;
+            border: 1px solid var(--danger-color);
+            border-radius: 4px;
+            background-color: #fff;
+        }
+        /* --- CHANGE END --- */
         dialog { border: 1px solid #ccc; border-radius: 8px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 90%; max-width: 500px; }
         dialog::backdrop { background-color: rgba(0,0,0,0.5); }
         dialog h3 { margin-top: 0; }
@@ -84,7 +95,6 @@
         <div class="form-field"><label>填入方式：</label><div class="radio-group"><input type="radio" id="fill-by-freq" name="fill-type" value="frequency" checked><label for="fill-by-freq">依預設頻率填入</label></div><div class="radio-group"><input type="radio" id="fill-single" name="fill-type" value="single"><label for="fill-single">僅臨時插入此班次</label></div></div>
         <div class="modal-footer"><button id="add-schedule-confirm-btn" style="background-color: var(--primary-color); color: white;">確認填入</button><button id="add-schedule-cancel-btn" value="cancel">取消</button></div>
     </dialog>
-
     <script>
     document.addEventListener('DOMContentLoaded', () => {
         const API = { 
@@ -114,7 +124,9 @@
         function getStartOfWeek(date) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(new Date(d.setDate(diff)).setHours(0,0,0,0)); }
         const formatDate = (date, withYear = false) => { const d = new Date(date); if (isNaN(d.getTime())) return ''; const year = d.getFullYear(); const month = d.getMonth() + 1; const day = d.getDate(); return withYear ? `${year}/${month}/${day}` : `${month}/${day}`; };
         const getWeekStartString = (date) => { const d = new Date(date); const year = d.getFullYear(); const month = (d.getMonth() + 1).toString().padStart(2, '0'); const day = d.getDate().toString().padStart(2, '0'); return `${year}-${month}-${day}`; };
-        const generateDiseaseTags = (diseases) => { if (!diseases || diseases.length === 0) return ''; return diseases.map(d => `<span class="disease-tag">${d.slice(0,1)}</span>`).join(''); };
+        // --- CHANGE START: Display full disease name ---
+        const generateDiseaseTags = (diseases) => { if (!diseases || diseases.length === 0) return ''; return diseases.map(d => `<span class="disease-tag">${d}</span>`).join(''); };
+        // --- CHANGE END ---
         
         // --- INITIALIZATION ---
         async function initialize() {
@@ -219,7 +231,25 @@
             });
         };
 
-        const updateStatsToolbar = () => { const statsToolbar = document.getElementById('stats-toolbar'); const dailyCounts = WEEKDAYS.map(() => ({ '早班': 0, '午班': 0, '晚班': 0 })); const currentSchedule = { ...weeklyScheduleData, ...pendingChanges.toAdd }; Object.values(currentSchedule).forEach(s => { if(pendingChanges.toDelete[s.id]) return; const slotIdParts = s.slotId.split('-'); if (slotIdParts.length === 3) { const [, shiftIndex, dayIndex] = slotIdParts.map(Number); if(!isNaN(dayIndex) && !isNaN(shiftIndex) && dailyCounts[dayIndex] && SHIFTS[shiftIndex]) { dailyCounts[dayIndex][SHIFTS[shiftIndex]]++; } } }); statsToolbar.innerHTML = dailyCounts.map((counts, dayIndex) => `<div class="stat-item"><strong>${WEEKDAYS[dayIndex]}:</strong><div class="stat-shift-group"><span class="shift-early">早: ${counts['早班']}</span><span class="shift-noon">午: ${counts['午班']}</span><span class="shift-late">晚: ${counts['晚班']}</span></div></div>`).join(''); };
+        const updateStatsToolbar = () => { const statsToolbar = document.getElementById('stats-toolbar'); const dailyCounts = WEEKDAYS.map(() => ({ '早班': 0, '午班': 0, '晚班': 0 })); const currentSchedule = { ...weeklyScheduleData, ...pendingChanges.toAdd }; Object.values(currentSchedule).forEach(s => { if(pendingChanges.toDelete[s.id]) return; const slotIdParts = s.slotId.split('-'); if (slotIdParts.length === 3) { const [, shiftIndex, dayIndex] = slotIdParts.map(Number).filter(n => !isNaN(n)); if(dailyCounts[dayIndex] && SHIFTS[shiftIndex]) { dailyCounts[dayIndex][SHIFTS[shiftIndex]]++; } } }); statsToolbar.innerHTML = dailyCounts.map((counts, dayIndex) => `<div class="stat-item"><strong>${WEEKDAYS[dayIndex]}:</strong><div class="stat-shift-group"><span class="shift-early">早: ${counts['早班']}</span><span class="shift-noon">午: ${counts['午班']}</span><span class="shift-late">晚: ${counts['晚班']}</span></div></div>`).join(''); };
+
+        // --- CHANGE START: New helper for duplicate check ---
+        function isPatientScheduledOnDay(patientId, dayIndex) {
+            const currentSchedule = { ...weeklyScheduleData, ...pendingChanges.toAdd };
+            for (const slotId in currentSchedule) {
+                const schedule = currentSchedule[slotId];
+                if (pendingChanges.toDelete[schedule.id]) continue; // Skip deleted items
+                
+                const parts = slotId.split('-');
+                const slotDayIndex = parseInt(parts[2], 10);
+                
+                if (slotDayIndex === dayIndex && schedule.patientId === patientId) {
+                    return true; // Found a duplicate on the same day
+                }
+            }
+            return false;
+        }
+        // --- CHANGE END ---
 
         // --- UI HANDLERS ---
         function addSlotEventListeners() { document.querySelectorAll('.schedule-slot').forEach(slot => { slot.addEventListener('click', (e) => { const slotId = e.currentTarget.dataset.slotId; const schedule = pendingChanges.toAdd[slotId] || weeklyScheduleData[slotId]; if (schedule && !pendingChanges.toDelete[schedule.id]) { clearScheduleSlot(schedule.id, slotId); } else { openAddScheduleDialog(slotId); } }); }); }
@@ -228,16 +258,27 @@
         
         const updateStatusIndicator = () => { const hasChanges = Object.keys(pendingChanges.toAdd).length > 0 || Object.keys(pendingChanges.toDelete).length > 0; statusIndicator.style.display = hasChanges ? 'inline' : 'none'; };
 
+        // --- CHANGE START: Modified handleAddSchedule with duplicate check ---
         const handleAddSchedule = () => { 
             const slotId = addScheduleDialog.dataset.slotId; 
             const patientId = patientSelect.value; 
             if (!patientId) return alert('請選擇一位病人！'); 
+            
             const patient = allPatients.find(p => p.id === patientId); 
             const fillType = document.querySelector('input[name="fill-type"]:checked').value; 
             const freq = patient.frequency; 
             const dayIndexesBasedOnFreq = FREQ_MAP[freq]; 
             const [bed, shiftIndex, dayIndex] = slotId.split('-'); 
             const daysToFill = (fillType === 'frequency' && dayIndexesBasedOnFreq) ? dayIndexesBasedOnFreq : [parseInt(dayIndex)]; 
+
+            // Check for duplicates before adding
+            for (const d_idx of daysToFill) {
+                if (isPatientScheduledOnDay(patientId, d_idx)) {
+                    alert(`新增失敗：病人 ${patient.name} 已於 ${WEEKDAYS[d_idx]} 有排班記錄。`);
+                    return; // Stop the process
+                }
+            }
+
             const weekStart = getWeekStartString(currentWeekStartDate); 
             daysToFill.forEach(d_idx => { 
                 const newSlotId = `${bed}-${shiftIndex}-${d_idx}`; 
@@ -246,6 +287,7 @@
             addScheduleDialog.close(); 
             updateDisplay(); 
         };
+        // --- CHANGE END ---
         
         const clearScheduleSlot = (scheduleId, slotId) => { 
             const schedule = pendingChanges.toAdd[slotId] || weeklyScheduleData[slotId]; 
@@ -261,9 +303,17 @@
                  return;
             }
             try { 
-                const toDeletePromises = Object.keys(pendingChanges.toDelete).map(id => fetch(`${API.weeklySchedule}/${id}`, { method: 'DELETE' })); 
-                const toAddPromises = Object.values(pendingChanges.toAdd).map(data => fetch(API.weeklySchedule, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })); 
-                await Promise.all([...toDeletePromises, ...toAddPromises]); 
+                // Using sequential execution to avoid rate limits
+                const toDeleteIds = Object.keys(pendingChanges.toDelete);
+                for (const id of toDeleteIds) {
+                    await fetch(`${API.weeklySchedule}/${id}`, { method: 'DELETE' });
+                }
+
+                const toAddItems = Object.values(pendingChanges.toAdd);
+                for (const item of toAddItems) {
+                    await fetch(API.weeklySchedule, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) });
+                }
+                 
                 alert('所有變更已成功儲存！'); 
                 await loadAllData(); 
             } catch (error) { console.error("Save changes failed:", error); alert('儲存變更失敗！'); } 
@@ -273,7 +323,6 @@
             if (Object.keys(pendingChanges.toAdd).length > 0 || Object.keys(pendingChanges.toDelete).length > 0) {
                 if (!confirm('您有未儲存的變更，是否要先儲存這些變更再複製到下週？\n(取消則不會執行複製)')) return;
                 await saveChangesToCloud();
-                // Check if changes are now empty, if not, saving failed.
                 if (Object.keys(pendingChanges.toAdd).length > 0 || Object.keys(pendingChanges.toDelete).length > 0) {
                     alert("儲存失敗，無法繼續複製。請檢查主控台錯誤。");
                     return;
