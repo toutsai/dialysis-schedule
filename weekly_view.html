@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V2.5 - 介面優化版)</title>
+    <title>門診週排班總表 (V2.6 - 統計列優化)</title>
     <style>
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
@@ -25,20 +25,7 @@
         #copy-to-next-week-btn:disabled { background-color: #6c757d; border-color: #6c757d; cursor: not-allowed; }
         .status-indicator { font-weight: bold; color: var(--danger-color); }
         .status-text { font-weight: bold; color: #6c757d; margin-left: auto; margin-right: 15px; }
-        
-        /* --- CHANGE START: Make stats toolbar a single scrollable row --- */
-        .stats-toolbar { 
-            display: flex;
-            gap: 20px;
-            padding: 10px;
-            background-color: var(--sidebar-bg);
-            border-radius: 5px;
-            margin-bottom: 20px;
-            overflow-x: auto; /* Allow horizontal scrolling */
-            white-space: nowrap; /* Prevent items from wrapping */
-        }
-        /* --- CHANGE END --- */
-
+        .stats-toolbar { display: flex; gap: 20px; padding: 10px; background-color: var(--sidebar-bg); border-radius: 5px; margin-bottom: 20px; overflow-x: auto; white-space: nowrap; }
         .stat-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 5px; background-color: #fff; border: 1px solid #e0e0e0; }
         .stat-item strong { font-size: 1.1em; }
         .stat-shift-group { display: flex; gap: 8px; }
@@ -48,36 +35,17 @@
         .stat-shift-group .shift-late { background-color: #17a2b8; }
         .main-content { display: flex; gap: 20px; }
         .schedule-area { flex-grow: 1; }
-        .inpatient-sidebar { width: 280px; flex-shrink: 0; background-color: var(--sidebar-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); max-height: calc(75vh + 20px); display: flex; flex-direction: column;}
+        .inpatient-sidebar { width: 240px; flex-shrink: 0; background-color: var(--sidebar-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); max-height: calc(75vh + 20px); display: flex; flex-direction: column;}
         .inpatient-sidebar h3 { margin-top: 0; text-align: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 10px; }
         .filter-group { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
         .filter-group button { padding: 4px 8px; font-size: 0.8em; flex-grow: 1; }
         .filter-group button.active { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
         #inpatient-list { list-style-type: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
-        
-        /* --- CHANGE START: New styles for inpatient list items --- */
-        #inpatient-list li { 
-            background-color: #fff; 
-            border: 1px solid #e0e0e0; 
-            padding: 8px 12px; 
-            margin-bottom: 8px; 
-            border-radius: 5px; 
-            display: flex; 
-            flex-direction: column; /* Arrange items vertically */
-            align-items: flex-start; /* Align to the left */
-            gap: 4px; /* Space between rows */
-        }
-        .patient-info-row {
-            display: flex;
-            justify-content: space-between;
-            width: 100%;
-            align-items: center;
-        }
+        #inpatient-list li { background-color: #fff; border: 1px solid #e0e0e0; padding: 8px 12px; margin-bottom: 8px; border-radius: 5px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+        .patient-info-row { display: flex; justify-content: space-between; width: 100%; align-items: center; }
         #inpatient-list li .name { font-weight: bold; font-size: 1.1em; }
         #inpatient-list li .mrn { font-size: 0.85em; color: #6c757d; }
         #inpatient-list li .freq { font-size: 0.9em; color: #555; background-color: #e9ecef; padding: 2px 6px; border-radius: 10px; }
-        /* --- CHANGE END --- */
-        
         .table-wrapper { max-height: calc(75vh + 20px); overflow: auto; }
         .weekly-schedule-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .weekly-schedule-table th, .weekly-schedule-table td { border: 1px solid var(--border-color); padding: 4px; text-align: center; vertical-align: middle; height: 65px; }
@@ -127,7 +95,7 @@
                 </div>
             </div>
             <aside class="inpatient-sidebar">
-                <h3>本週住院病人</h3>
+                <h3>住院病人清單</h3>
                 <div class="filter-group">
                     <button data-filter="all" class="active">全部</button>
                     <button data-filter="135">一三五</button>
@@ -243,7 +211,6 @@
             }
         }
         
-        // --- CHANGE START: Update inpatient list rendering ---
         function renderInpatientList() {
             let inpatients = allPatients.filter(p => p.status === 'ipd');
             
@@ -275,7 +242,6 @@
                 });
             }
         }
-        // --- CHANGE END ---
 
         const renderWeeklyScheduleTableFrame = () => {
             const head = document.getElementById('weekly-schedule-head');
@@ -325,7 +291,27 @@
             });
         };
 
-        const updateStatsToolbar = () => { const statsToolbar = document.getElementById('stats-toolbar'); const dailyCounts = WEEKDAYS.map(() => ({ '早班': 0, '午班': 0, '晚班': 0 })); const currentSchedule = { ...weeklyScheduleData, ...pendingChanges.toAdd }; Object.values(currentSchedule).forEach(s => { if(pendingChanges.toDelete[s.id]) return; const slotIdParts = s.slotId.split('-'); if (slotIdParts.length === 3) { const shiftIndex = parseInt(slotIdParts[1], 10); const dayIndex = parseInt(slotIdParts[2], 10); if(!isNaN(dayIndex) && !isNaN(shiftIndex) && dailyCounts[dayIndex] && SHIFTS[shiftIndex]) { dailyCounts[dayIndex][SHIFTS[shiftIndex]]++; } } }); statsToolbar.innerHTML = dailyCounts.map((counts, dayIndex) => `<div class="stat-item"><strong>${WEEKDAYS[dayIndex]}:</strong><div class="stat-shift-group"><span class="shift-early">早: ${counts['早班']}</span><span class="shift-noon">午: ${counts['午班']}</span><span class="shift-late">晚: ${counts['晚班']}</span></div></div>`).join(''); };
+        // --- CHANGE START: Update stats toolbar to show abbreviated weekday ---
+        const updateStatsToolbar = () => { 
+            const statsToolbar = document.getElementById('stats-toolbar'); 
+            const dailyCounts = WEEKDAYS.map(() => ({ '早班': 0, '午班': 0, '晚班': 0 })); 
+            const currentSchedule = { ...weeklyScheduleData, ...pendingChanges.toAdd }; 
+            Object.values(currentSchedule).forEach(s => { 
+                if(pendingChanges.toDelete[s.id]) return; 
+                const slotIdParts = s.slotId.split('-'); 
+                if (slotIdParts.length === 3) { 
+                    const shiftIndex = parseInt(slotIdParts[1], 10); 
+                    const dayIndex = parseInt(slotIdParts[2], 10); 
+                    if(!isNaN(dayIndex) && !isNaN(shiftIndex) && dailyCounts[dayIndex] && SHIFTS[shiftIndex]) { 
+                        dailyCounts[dayIndex][SHIFTS[shiftIndex]]++; 
+                    } 
+                } 
+            }); 
+            statsToolbar.innerHTML = dailyCounts.map((counts, dayIndex) => 
+                `<div class="stat-item"><strong>${WEEKDAYS[dayIndex].slice(0, 1)}:</strong><div class="stat-shift-group"><span class="shift-early">早: ${counts['早班']}</span><span class="shift-noon">午: ${counts['午班']}</span><span class="shift-late">晚: ${counts['晚班']}</span></div></div>`
+            ).join(''); 
+        };
+        // --- CHANGE END ---
         
         function isPatientScheduledOnDay(patientId, dayIndex) {
             const currentSchedule = { ...weeklyScheduleData, ...pendingChanges.toAdd };
@@ -473,7 +459,7 @@
                     await fetch(API.weeklySchedule, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sch) });
                 }
 
-                alert('成功複製到下一週！現在將跳轉到下一週。');
+                alert('複製成功！現在將跳轉到下一週。');
                 changeWeek(7, true);
 
             } catch (error) {
