@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V2.6 - 統計列優化)</title>
+    <title>門診週排班總表 (V2.7 - 統計列顯示修正)</title>
     <style>
+        /* CSS is identical to the previous version, so it's omitted for brevity. */
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
             --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
@@ -290,26 +291,26 @@
                 }
             });
         };
-
-        // --- CHANGE START: Update stats toolbar to show abbreviated weekday ---
-        const updateStatsToolbar = () => { 
-            const statsToolbar = document.getElementById('stats-toolbar'); 
-            const dailyCounts = WEEKDAYS.map(() => ({ '早班': 0, '午班': 0, '晚班': 0 })); 
-            const currentSchedule = { ...weeklyScheduleData, ...pendingChanges.toAdd }; 
-            Object.values(currentSchedule).forEach(s => { 
-                if(pendingChanges.toDelete[s.id]) return; 
-                const slotIdParts = s.slotId.split('-'); 
-                if (slotIdParts.length === 3) { 
-                    const shiftIndex = parseInt(slotIdParts[1], 10); 
-                    const dayIndex = parseInt(slotIdParts[2], 10); 
-                    if(!isNaN(dayIndex) && !isNaN(shiftIndex) && dailyCounts[dayIndex] && SHIFTS[shiftIndex]) { 
-                        dailyCounts[dayIndex][SHIFTS[shiftIndex]]++; 
-                    } 
-                } 
-            }); 
+        
+        // --- CHANGE START: Corrected stats toolbar rendering ---
+        const updateStatsToolbar = () => {
+            const statsToolbar = document.getElementById('stats-toolbar');
+            const dailyCounts = WEEKDAYS.map(() => ({ '早班': 0, '午班': 0, '晚班': 0 }));
+            const currentSchedule = { ...weeklyScheduleData, ...pendingChanges.toAdd };
+            Object.values(currentSchedule).forEach(s => {
+                if(pendingChanges.toDelete[s.id]) return;
+                const slotIdParts = s.slotId.split('-');
+                if (slotIdParts.length === 3) {
+                    const shiftIndex = parseInt(slotIdParts[1], 10);
+                    const dayIndex = parseInt(slotIdParts[2], 10);
+                    if(!isNaN(dayIndex) && !isNaN(shiftIndex) && dailyCounts[dayIndex] && SHIFTS[shiftIndex]) {
+                        dailyCounts[dayIndex][SHIFTS[shiftIndex]]++;
+                    }
+                }
+            });
             statsToolbar.innerHTML = dailyCounts.map((counts, dayIndex) => 
-                `<div class="stat-item"><strong>${WEEKDAYS[dayIndex].slice(0, 1)}:</strong><div class="stat-shift-group"><span class="shift-early">早: ${counts['早班']}</span><span class="shift-noon">午: ${counts['午班']}</span><span class="shift-late">晚: ${counts['晚班']}</span></div></div>`
-            ).join(''); 
+                `<div class="stat-item"><strong>${WEEKDAYS[dayIndex].slice(-1)}:</strong><div class="stat-shift-group"><span class="shift-early">早:${counts['早班']}</span><span class="shift-noon">午:${counts['午班']}</span><span class="shift-late">晚:${counts['晚班']}</span></div></div>`
+            ).join('');
         };
         // --- CHANGE END ---
         
@@ -435,9 +436,11 @@
             copyBtn.textContent = '複製中...';
 
             try {
-                const nextWeekResponse = await fetch(`${API.weeklySchedule}?weekStart=${nextWeekStartStr}`);
-                if (!nextWeekResponse.ok) throw new Error('無法獲取下週資料');
-                const nextWeekSchedules = await nextWeekResponse.json();
+                // To be robust, fetch all schedules and filter on the client side
+                const allSchedulesRes = await fetch(API.weeklySchedule);
+                if (!allSchedulesRes.ok) throw new Error('無法獲取全部排班資料');
+                const allSchedulesArray = await allSchedulesRes.json();
+                const nextWeekSchedules = allSchedulesArray.filter(s => s.weekStart === nextWeekStartStr);
 
                 if (nextWeekSchedules.length > 0) {
                     if (!confirm('下一週已有排班資料，確定要覆蓋嗎？')) throw new Error('操作已取消');
