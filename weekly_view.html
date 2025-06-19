@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V2.7 - 統計列顯示修正)</title>
+    <title>門診週排班總表 (V2.8 - API修正版)</title>
     <style>
         /* CSS is identical to the previous version, so it's omitted for brevity. */
         :root {
@@ -117,10 +117,12 @@
     </dialog>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
+        // --- CHANGE START: Update API URLs to be consistent ---
         const API = { 
             patients: 'https://684eb206f0c9c9848d28d637.mockapi.io/patients', 
-            weeklySchedule: 'https://6852ef850594059b23cfaa4f.mockapi.io/weekly_schedule' 
+            weeklySchedule: 'https://684eb206f0c9c9848d28d637.mockapi.io/weekly_schedule' 
         };
+        // --- CHANGE END ---
         const SHIFTS = ['早班', '午班', '晚班'];
         const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
         const FREQ_MAP = { '一三五': [0, 2, 4], '二四六': [1, 3, 5], '一四': [0, 3], '二五': [1, 4], '三六': [2, 5], '一五': [0, 4], '二六': [1, 5] };
@@ -292,7 +294,6 @@
             });
         };
         
-        // --- CHANGE START: Corrected stats toolbar rendering ---
         const updateStatsToolbar = () => {
             const statsToolbar = document.getElementById('stats-toolbar');
             const dailyCounts = WEEKDAYS.map(() => ({ '早班': 0, '午班': 0, '晚班': 0 }));
@@ -312,7 +313,6 @@
                 `<div class="stat-item"><strong>${WEEKDAYS[dayIndex].slice(-1)}:</strong><div class="stat-shift-group"><span class="shift-early">早:${counts['早班']}</span><span class="shift-noon">午:${counts['午班']}</span><span class="shift-late">晚:${counts['晚班']}</span></div></div>`
             ).join('');
         };
-        // --- CHANGE END ---
         
         function isPatientScheduledOnDay(patientId, dayIndex) {
             const currentSchedule = { ...weeklyScheduleData, ...pendingChanges.toAdd };
@@ -436,7 +436,6 @@
             copyBtn.textContent = '複製中...';
 
             try {
-                // To be robust, fetch all schedules and filter on the client side
                 const allSchedulesRes = await fetch(API.weeklySchedule);
                 if (!allSchedulesRes.ok) throw new Error('無法獲取全部排班資料');
                 const allSchedulesArray = await allSchedulesRes.json();
