@@ -2,9 +2,9 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>護理師組別統計報表 (V23.8 - 穩定性重構最終版)</title>
+    <title>護理師組別統計報表 (V23.10 - API更新版)</title>
     <style>
-        /* CSS 與 V23.7 完全相同 */
+        /* CSS inalterado */
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; padding: 20px; background-color: #f9f9f9; }
         .top-bar { display: flex; justify-content: space-between; align-items: center; max-width: 100%; margin: 0 auto 20px; }
         h1 { text-align: center; color: #333; flex-grow: 1; }
@@ -67,11 +67,12 @@
     </div>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const API_BASE_URL = 'https://684eb206f0c9c9848d28d637.mockapi.io/schedules';
-        let currentDate = new Date(); // 唯一的日期狀態來源
+        // --- CHANGE START: Update API URL ---
+        const API_BASE_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/schedules';
+        // --- CHANGE END ---
+        let currentDate = new Date();
         let currentRecord = null;
         
-        // DOM Elements
         const statusIndicator = document.getElementById('status-indicator');
         const dateDisplay = document.getElementById('current-date-display');
         const earlyTable = document.getElementById('early-shift-table');
@@ -79,16 +80,18 @@
         const saveNamesBtn = document.getElementById('save-names-btn');
         const clearNamesBtn = document.getElementById('clear-names-btn');
 
-        // Constants
         const baseTeams = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', '外圍'];
         const nurseNameList = [ "陳素秋", "古孟麗", "謝常菁", "林玉麗", "陳聖柔", "田姿瑛", "陳韋吟", "劉姿秀", "劉舒婷", "李慈賢", "黃羿寧", "高佩鳳", "林沛儀", "李汶娟", "陳芃諭", "葛孟萍", "蘇愛玲", "郭芳君", "林馨如", "賴秋妏", "胡國暄", "施艾利", "陳淑玲", "謝慶諭", "林佩佳", "吳思婷", "曾佩君", "吳幸美" ];
         const nurseOptionsHTML = `<option value=""></option>` + nurseNameList.map(name => `<option value="${name}">${name}</option>`).join('');
         
-        // --- Utility Functions ---
-        const formatDate = (date) => date.toISOString().split('T')[0];
+        const formatDate = (date) => {
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
         const setStatus = (message) => { statusIndicator.textContent = message; };
 
-        // --- Core Logic: Data Fetching and Saving ---
         async function loadStatsFromCloud(dateStr) {
             earlyTable.innerHTML = '';
             lateTable.innerHTML = '';
@@ -138,7 +141,6 @@
             }
         }
 
-        // --- Core Logic: Rendering ---
         function loadReportData(fullData) {
             const { schedule, names } = fullData;
             const statsData = {};
@@ -166,24 +168,16 @@
             generateLateShiftTable(lateTable, '晚', statsData, names || {});
         }
 
-        function generateEarlyShiftTable(tableElement, shiftPrefix, statsData, statsNames) { /* ...與V23.2相同... */ }
-        function generateLateShiftTable(tableElement, shiftPrefix, statsData, statsNames) { /* ...與V23.2相同... */ }
-        function formatPatientListWithColor(arr) { /* ...與V23.4相同... */ }
-
-        // --- CHANGE START: 重構日期管理和導航邏輯 ---
         function updateAndLoad(newDate) {
             currentDate = newDate;
             const dateStr = formatDate(currentDate);
 
-            // 1. Update display
             dateDisplay.textContent = `${dateStr} 統計報表`;
             
-            // 2. Update URL for refresh/bookmarking
             const newUrl = new URL(window.location);
             newUrl.searchParams.set('date', dateStr);
             window.history.pushState({}, '', newUrl);
 
-            // 3. Fetch data for the new date
             loadStatsFromCloud(dateStr);
         }
 
@@ -194,9 +188,6 @@
         }
 
         function goToToday() {
-            const newUrl = new URL(window.location);
-            newUrl.searchParams.delete('date');
-            window.history.pushState({}, '', newUrl);
             updateAndLoad(new Date());
         }
 
@@ -205,11 +196,13 @@
             const dateFromUrl = urlParams.get('date');
             
             const initialDate = dateFromUrl ? new Date(dateFromUrl + 'T00:00:00') : new Date();
-            updateAndLoad(initialDate);
+            if (isNaN(initialDate.getTime())) {
+                 updateAndLoad(new Date());
+            } else {
+                 updateAndLoad(initialDate);
+            }
         }
-        // --- CHANGE END ---
 
-        // --- Event Listeners ---
         saveNamesBtn.addEventListener('click', () => {
             const newNames = {};
             document.querySelectorAll('.name-select').forEach(select => { if (select.value) { newNames[select.dataset.teamId] = select.value; } });
@@ -220,10 +213,9 @@
         document.getElementById('next-date-btn').addEventListener('click', () => changeDate(1));
         document.getElementById('today-btn').addEventListener('click', goToToday);
         
-        // --- 為求完整，複製貼上其他未變動的函式 ---
-        formatPatientListWithColor = (arr) => { return arr.map(p => { const u = p.toUpperCase(); let c = ''; if (u.includes('抽')) { c = 'tag-chou'; } else if (u.includes('住')) { c = 'hospitalized'; } else if (u.includes('換')) { c = 'tag-huan'; } else if (u.includes('兩')) { c = 'tag-liang'; } else if (u.includes('B')) { c = 'tag-b'; } return c ? `<span class="${c}">${p}</span>` : `<span>${p}</span>`; }).join(''); };
-        generateEarlyShiftTable = (tableElement, shiftPrefix, statsData, statsNames) => { tableElement.innerHTML = ''; const headerRow = document.createElement('tr'); headerRow.className = 'team-header-row'; headerRow.innerHTML = `<th class="row-header"></th>`; const nameRow = document.createElement('tr'); nameRow.innerHTML = `<th class="row-header">姓名</th>`; const earlyPatientsRow = document.createElement('tr'); earlyPatientsRow.innerHTML = `<th class="row-header">早班</th>`; const noonInPatientsRow = document.createElement('tr'); noonInPatientsRow.innerHTML = `<th class="row-header">午班(上針)</th>`; const noonOutPatientsRow = document.createElement('tr'); noonOutPatientsRow.innerHTML = `<th class="row-header">午班(收針)</th>`; baseTeams.forEach(team => { const fullTeamName = `${shiftPrefix}${team}`; const teamData = statsData[fullTeamName] || { early: [], noon_in: [], noon_out: [] }; headerRow.innerHTML += `<td>${fullTeamName}組</td>`; nameRow.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${fullTeamName}">${nurseOptionsHTML}</select></td>`; earlyPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.early)}</td>`; noonInPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.noon_in)}</td>`; noonOutPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.noon_out)}</td>`; }); tableElement.append(headerRow, nameRow, earlyPatientsRow, noonInPatientsRow, noonOutPatientsRow); tableElement.querySelectorAll('.name-select').forEach(s => { if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId]; }); };
-        generateLateShiftTable = (tableElement, shiftPrefix, statsData, statsNames) => { tableElement.innerHTML = ''; const headerRow = document.createElement('tr'); headerRow.className = 'team-header-row'; headerRow.innerHTML = `<th class="row-header"></th>`; const nameRow = document.createElement('tr'); nameRow.innerHTML = `<th class="row-header">姓名</th>`; const noonOutPatientsRow = document.createElement('tr'); noonOutPatientsRow.innerHTML = `<th class="row-header">午班(收針)</th>`; const latePatientsRow = document.createElement('tr'); latePatientsRow.innerHTML = `<th class="row-header">晚班</th>`; baseTeams.forEach(team => { const fullTeamName = `${shiftPrefix}${team}`; const teamData = statsData[fullTeamName] || { noon_out: [], late: [] }; headerRow.innerHTML += `<td>${fullTeamName}組</td>`; nameRow.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${fullTeamName}">${nurseOptionsHTML}</select></td>`; noonOutPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.noon_out)}</td>`; latePatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.late)}</td>`; }); tableElement.append(headerRow, nameRow, noonOutPatientsRow, latePatientsRow); tableElement.querySelectorAll('.name-select').forEach(s => { if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId]; }); };
+        const formatPatientListWithColor = (arr) => { return arr.map(p => { const u = p.toUpperCase(); let c = ''; if (u.includes('抽')) { c = 'tag-chou'; } else if (u.includes('住')) { c = 'hospitalized'; } else if (u.includes('換')) { c = 'tag-huan'; } else if (u.includes('兩')) { c = 'tag-liang'; } else if (u.includes('B')) { c = 'tag-b'; } return c ? `<span class="${c}">${p}</span>` : `<span>${p}</span>`; }).join(''); };
+        const generateEarlyShiftTable = (tableElement, shiftPrefix, statsData, statsNames) => { tableElement.innerHTML = ''; const headerRow = document.createElement('tr'); headerRow.className = 'team-header-row'; headerRow.innerHTML = `<th class="row-header"></th>`; const nameRow = document.createElement('tr'); nameRow.innerHTML = `<th class="row-header">姓名</th>`; const earlyPatientsRow = document.createElement('tr'); earlyPatientsRow.innerHTML = `<th class="row-header">早班</th>`; const noonInPatientsRow = document.createElement('tr'); noonInPatientsRow.innerHTML = `<th class="row-header">午班(上針)</th>`; const noonOutPatientsRow = document.createElement('tr'); noonOutPatientsRow.innerHTML = `<th class="row-header">午班(收針)</th>`; baseTeams.forEach(team => { const fullTeamName = `${shiftPrefix}${team}`; const teamData = statsData[fullTeamName] || { early: [], noon_in: [], noon_out: [] }; headerRow.innerHTML += `<td>${fullTeamName}組</td>`; nameRow.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${fullTeamName}">${nurseOptionsHTML}</select></td>`; earlyPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.early)}</td>`; noonInPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.noon_in)}</td>`; noonOutPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.noon_out)}</td>`; }); tableElement.append(headerRow, nameRow, earlyPatientsRow, noonInPatientsRow, noonOutPatientsRow); tableElement.querySelectorAll('.name-select').forEach(s => { if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId]; }); };
+        const generateLateShiftTable = (tableElement, shiftPrefix, statsData, statsNames) => { tableElement.innerHTML = ''; const headerRow = document.createElement('tr'); headerRow.className = 'team-header-row'; headerRow.innerHTML = `<th class="row-header"></th>`; const nameRow = document.createElement('tr'); nameRow.innerHTML = `<th class="row-header">姓名</th>`; const noonOutPatientsRow = document.createElement('tr'); noonOutPatientsRow.innerHTML = `<th class="row-header">午班(收針)</th>`; const latePatientsRow = document.createElement('tr'); latePatientsRow.innerHTML = `<th class="row-header">晚班</th>`; baseTeams.forEach(team => { const fullTeamName = `${shiftPrefix}${team}`; const teamData = statsData[fullTeamName] || { noon_out: [], late: [] }; headerRow.innerHTML += `<td>${fullTeamName}組</td>`; nameRow.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${fullTeamName}">${nurseOptionsHTML}</select></td>`; noonOutPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.noon_out)}</td>`; latePatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.late)}</td>`; }); tableElement.append(headerRow, nameRow, noonOutPatientsRow, latePatientsRow); tableElement.querySelectorAll('.name-select').forEach(s => { if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId]; }); };
         
         initialize();
     });
