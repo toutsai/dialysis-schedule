@@ -1,140 +1,157 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>血液透析綜合管理平台</title>
     <style>
-        html, body {
+        * {
             margin: 0;
             padding: 0;
-            height: 100%;
-            font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
-            overflow: hidden; /* 防止滾動條出現在主頁面 */
+            box-sizing: border-box;
         }
-        .dashboard-container {
-            display: flex;
-            height: 100vh;
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", Roboto, Arial, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
         }
-        .sidebar {
-            width: 220px;
-            background-color: #2c3e50;
-            color: white;
-            padding: 20px 0;
-            flex-shrink: 0;
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
-            transition: width 0.3s;
+            justify-content: center;
         }
-        .sidebar-header {
-            padding: 0 20px 20px 20px;
-            font-size: 1.5em;
-            font-weight: bold;
+        
+        h1 {
             text-align: center;
-            border-bottom: 1px solid #34495e;
-            white-space: nowrap;
+            color: #2c3e50;
+            font-size: 2.5rem;
+            margin-bottom: 3rem;
+            font-weight: 600;
         }
-        .sidebar-nav {
-            list-style: none;
-            padding: 20px 0;
-            margin: 0;
-            flex-grow: 1;
+        
+        .nav-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
         }
-        .sidebar-nav li a {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            color: #ecf0f1;
+        
+        .nav-card {
+            background: white;
+            padding: 3rem 2rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
             text-decoration: none;
-            padding: 15px 20px;
-            font-size: 1.1em;
-            transition: background-color 0.2s, padding-left 0.2s;
-            white-space: nowrap;
-        }
-        .sidebar-nav li a:hover {
-            background-color: #34495e;
-        }
-        .sidebar-nav li a.active {
-            background-color: #1abc9c;
-            color: white;
-            font-weight: bold;
-            padding-left: 25px;
-        }
-        .content-area {
-            flex-grow: 1;
+            color: #333;
+            transition: all 0.3s ease;
+            text-align: center;
+            position: relative;
             overflow: hidden;
         }
-        .content-iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
+        
+        .nav-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #4a90e2, #63b3ed);
+            transform: scaleX(0);
+            transition: transform 0.3s ease;
+        }
+        
+        .nav-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+        
+        .nav-card:hover::before {
+            transform: scaleX(1);
+        }
+        
+        .nav-card h2 {
+            font-size: 1.5rem;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        
+        .nav-card .icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: #4a90e2;
+        }
+        
+        .nav-card .description {
+            color: #666;
+            font-size: 0.95rem;
+            margin-top: 0.5rem;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 4rem;
+            color: #999;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2rem;
+            }
+            
+            .nav-grid {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+            
+            .nav-card {
+                padding: 2rem 1.5rem;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="dashboard-container">
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                管理平台
-            </div>
-            <ul class="sidebar-nav">
-                <li><a href="schedule.html" class="nav-link active" target="content-iframe">每日排程表</a></li>
-                <li><a href="stats.html" class="nav-link" target="content-iframe">統計報表</a></li>
-                <li><a href="patients.html" class="nav-link" target="content-iframe">病人管理系統</a></li>
-                <li><a href="weekly_view.html" class="nav-link" target="content-iframe">週排班總表</a></li>
-            </ul>
-        </aside>
-        <main class="content-area">
-            <iframe name="content-iframe" class="content-iframe" src="schedule.html"></iframe>
-        </main>
+    <div class="container">
+        <h1>血液透析綜合管理平台</h1>
+        
+        <div class="nav-grid">
+            <a href="schedule.html" class="nav-card">
+                <div class="icon">📅</div>
+                <h2>每日排程表</h2>
+                <p class="description">管理每日透析排程與床位安排</p>
+            </a>
+            
+            <a href="stats.html" class="nav-card">
+                <div class="icon">📊</div>
+                <h2>護理分組檢視</h2>
+                <p class="description">查看護理師分組與統計報表</p>
+            </a>
+            
+            <a href="patients.html" class="nav-card">
+                <div class="icon">👥</div>
+                <h2>病人管理系統</h2>
+                <p class="description">管理病人資料與就診記錄</p>
+            </a>
+            
+            <a href="weekly_view.html" class="nav-card">
+                <div class="icon">📋</div>
+                <h2>週排班總表</h2>
+                <p class="description">檢視與管理每週排班表</p>
+            </a>
+        </div>
+        
+        <div class="footer">
+            <p>血液透析綜合管理平台 © 2024</p>
+        </div>
     </div>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
-            const iframe = document.querySelector('.content-iframe');
-
-            // 讓子頁面可以呼叫這個函式來切換頁面
-            window.navigateTo = function(pageUrl) {
-                if (iframe.src !== pageUrl) {
-                    iframe.src = pageUrl;
-                }
-                
-                // 更新側邊欄的 active 狀態
-                navLinks.forEach(link => {
-                    // 檢查連結的 href 是否與目標 URL 的路徑部分匹配
-                    const linkPath = new URL(link.href, window.location.origin).pathname;
-                    const targetPath = new URL(pageUrl, window.location.origin).pathname;
-
-                    if (linkPath === targetPath) {
-                        link.classList.add('active');
-                    } else {
-                        link.classList.remove('active');
-                    }
-                });
-            };
-
-            // 處理側邊欄點擊事件
-            navLinks.forEach(link => {
-                link.addEventListener('click', (e) => {
-                    // 更新 active 狀態
-                    navLinks.forEach(l => l.classList.remove('active'));
-                    e.currentTarget.classList.add('active');
-                });
-            });
-
-            // 監聽 iframe 載入完成事件，確保點擊連結後能正確更新 active 狀態
-             iframe.addEventListener('load', () => {
-                const currentIframeSrc = iframe.contentWindow.location.href;
-                navLinks.forEach(link => {
-                    if (link.href === currentIframeSrc) {
-                        link.classList.add('active');
-                    } else {
-                        link.classList.remove('active');
-                    }
-                });
-            });
-        });
-    </script>
 </body>
 </html>
