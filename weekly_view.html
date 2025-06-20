@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V3.1 - 選擇器優化修正)</title>
+    <title>門診週排班總表 (V3.2 - 對話框按鈕修正)</title>
     <style>
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
@@ -183,6 +183,7 @@
         const patientListContainer = document.getElementById('patient-list-container');
         const dialogTabs = document.querySelector('.dialog-tabs');
         const confirmBtn = document.getElementById('add-schedule-confirm-btn');
+        const cancelBtn = document.getElementById('add-schedule-cancel-btn');
         const statusIndicator = document.getElementById('status-indicator');
         const copyBtn = document.getElementById('copy-to-next-week-btn');
         const statusText = document.getElementById('status-text');
@@ -265,22 +266,17 @@
         function renderInpatientList() {
             let inpatients = allPatients.filter(p => p.status === 'ipd');
             const regularFreqs = ['一三五', '二四六'];
-            if (inpatientFilter === '135') {
-                inpatients = inpatients.filter(p => p.frequency === '一三五');
-            } else if (inpatientFilter === '246') {
-                inpatients = inpatients.filter(p => p.frequency === '二四六');
-            } else if (inpatientFilter === 'other') {
-                inpatients = inpatients.filter(p => !regularFreqs.includes(p.frequency));
-            }
+            if (inpatientFilter === '135') { inpatients = inpatients.filter(p => p.frequency === '一三五');
+            } else if (inpatientFilter === '246') { inpatients = inpatients.filter(p => p.frequency === '二四六');
+            } else if (inpatientFilter === 'other') { inpatients = inpatients.filter(p => !regularFreqs.includes(p.frequency)); }
+            
             inpatientList.innerHTML = '';
             if (inpatients.length === 0) {
                 inpatientList.innerHTML = '<li>無符合條件的住院病人</li>';
             } else {
                 inpatients.forEach(p => {
                     const li = document.createElement('li');
-                    if (isPatientScheduledThisWeek(p.id)) {
-                        li.classList.add('scheduled-inpatient');
-                    }
+                    if (isPatientScheduledThisWeek(p.id)) { li.classList.add('scheduled-inpatient'); }
                     li.innerHTML = `
                         <div class="patient-info-row">
                             <span class="name">${p.name}</span>
@@ -299,9 +295,7 @@
             const head = document.getElementById('weekly-schedule-head');
             const body = document.getElementById('weekly-schedule-body');
             let headerHtml = '<tr><th>床位</th><th>班次</th>';
-            WEEKDAYS.forEach((day) => {
-                headerHtml += `<th><div class="weekday">${day}</div><div class="date"></div></th>`;
-            });
+            WEEKDAYS.forEach((day) => { headerHtml += `<th><div class="weekday">${day}</div><div class="date"></div></th>`; });
             headerHtml += '</tr>';
             head.innerHTML = headerHtml;
             let bodyHtml = '';
@@ -400,6 +394,8 @@
                     e.target.classList.add('active');
                     dialogState.currentTab = e.target.dataset.type;
                     patientSearchInput.value = '';
+                    dialogState.selectedPatientId = null; // Clear selection on tab change
+                    confirmBtn.disabled = true;
                     renderPatientListInDialog();
                 }
             });
@@ -420,6 +416,11 @@
                     confirmBtn.disabled = false;
                 }
             });
+
+            // --- CHANGE START: Add event listeners for dialog buttons ---
+            confirmBtn.addEventListener('click', handleAddSchedule);
+            cancelBtn.addEventListener('click', () => addScheduleDialog.close());
+            // --- CHANGE END ---
         }
         
         function renderPatientListInDialog(searchTerm = '') {
@@ -513,9 +514,6 @@
             if (!schedule || !confirm('確定要清除這個排班嗎？(此操作需儲存後才會生效)')) return; 
             if (pendingChanges.toAdd[slotId]) { delete pendingChanges.toAdd[slotId]; } 
             
-            // For saved data, use the real ID from the object.
-            // For newly added data, the scheduleId passed in might be the slotId,
-            // but we only care about the real ID for deletion.
             const realId = schedule.id;
             if (realId) { pendingChanges.toDelete[realId] = true; } 
 
