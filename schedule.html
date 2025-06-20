@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>洗腎室床位病人排程表 (V30.0 - 清空邏輯修正)</title>
+    <title>洗腎室床位病人排程表 (V30.1 - 日期切換修正)</title>
     <style>
         body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .controls-panel { max-width: 1800px; margin: 0 auto 20px; padding: 15px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
@@ -219,12 +219,10 @@
         function generateLayout() {
             generateWingLayout(leftWing, layoutData.leftWingRows, 'left-wing-bed');
             generateWingLayout(rightWing, layoutData.rightWingRows, 'right-wing-bed');
-            
             const nursingStationRow = document.createElement('div'); 
             nursingStationRow.className = 'bed-row'; 
             nursingStationRow.innerHTML = '<div class="nursing-station">護理站</div>';
             leftWing.appendChild(nursingStationRow);
-            
             peripheralContainer.innerHTML = '';
             for (let i = 1; i <= peripheralBedCount; i++) { 
                 peripheralContainer.appendChild(createPeripheralBedElement(i)); 
@@ -279,7 +277,7 @@
             return bedDiv;
         }
         
-        function clearBoard() {
+        function clearBoardUi() {
             document.querySelectorAll('.newly-synced, .conflict-detected').forEach(el => {
                 el.classList.remove('newly-synced', 'conflict-detected');
             });
@@ -287,7 +285,6 @@
             document.querySelectorAll('div[contenteditable="true"]').forEach(d => d.textContent = '');
             document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight'));
             document.querySelectorAll('.tag-chou, .tag-new, .hospitalized, .tag-huan, .tag-liang, .tag-b, .status-opd').forEach(el => el.classList.remove('tag-chou', 'tag-new', 'hospitalized', 'tag-huan', 'tag-liang', 'tag-b', 'status-opd'));
-            // Don't reset currentRecord here, it's needed for the "clear" logic
             updateShiftPatientCount();
             setStatus('畫面已清空', 'unsaved');
         }
@@ -336,7 +333,10 @@
         }
         
         async function loadAndSyncSchedules(dateStr) {
-            clearBoard();
+            // --- CHANGE START: Reset state before loading new date ---
+            currentRecord = null;
+            clearBoardUi();
+            // --- CHANGE END ---
             setStatus('讀取中...', 'loading');
             
             try {
@@ -394,7 +394,7 @@
             } catch (error) {
                 console.error('讀取與同步資料失敗:', error);
                 setStatus('讀取或同步失敗', 'error');
-                renderInpatientList();
+                renderInpatientList(); // Still render list on error
             }
         }
 
@@ -403,7 +403,7 @@
             const additions = [];
             const dailyBedShiftToPatientName = new Map();
             Object.values(dailyData).forEach(data => {
-                if (data.patient && data.shiftId) { // Ensure shiftId exists
+                if (data.patient && data.shiftId) {
                     const parts = data.shiftId.split('-');
                     if (parts.length === 3) {
                          const bedShift = `${parts[1]}-${parts[2]}`;
@@ -413,7 +413,7 @@
             });
 
             weeklySchedulesRaw.forEach(weeklyItem => {
-                if (!weeklyItem.slotId) return; // aafeguard
+                if (!weeklyItem.slotId) return;
                 const parts = weeklyItem.slotId.split('-');
                 if (parts.length < 3 || parseInt(parts[2], 10) !== weeklyDayIndex) return;
 
@@ -596,10 +596,10 @@
                 if (!response.ok) throw new Error(`找不到來源日期的資料`);
                 const data = await response.json();
                 if (data.length > 0) {
-                    clearBoard();
+                    clearBoardUi(); // Use the UI-only clear function
                     currentRecord = null;
                     renderDataToUI(data[0].schedule || {});
-                    updateShiftPatientCount(); // Update counts after rendering
+                    updateShiftPatientCount();
                     setStatus('複製成功，請記得儲存', 'unsaved');
                 } else {
                     alert(`在雲端找不到 ${sourceDateStr} 的排程資料。`);
@@ -636,15 +636,14 @@
             if (currentRecord) {
                 if (confirm("偵測到本日雲端有排程資料，您要一併刪除嗎？\n\n- 按 [確定] 將會刪除雲端資料並清空畫面。\n- 按 [取消] 將只會清空目前畫面（下次載入時會重新同步）。")) {
                     deleteDailyRecord().then(() => {
-                        clearBoard();
-                        currentRecord = null; // Ensure state is consistent
+                        clearBoardUi();
                     });
                 } else {
-                    clearBoard();
+                    clearBoardUi();
                 }
             } else {
                 if (confirm('確定要清除畫面上的所有資料嗎？')) {
-                    clearBoard();
+                    clearBoardUi();
                 }
             }
         });
