@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>洗腎室床位病人排程表 (V27.0 - 狀態顏色自動化)</title>
+    <title>洗腎室床位病人排程表 (V28.0 - 每日排班高亮)</title>
     <style>
         body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .controls-panel { max-width: 1800px; margin: 0 auto 20px; padding: 15px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
@@ -70,17 +70,13 @@
         .patient-tag:empty::before { content: "備註"; color: #aaa; font-style: italic; }
         .nurse-team-select:has(option[value=""]:checked) { background-color: #dcdcdc !important; }
         
-        /* --- CHANGE START: Add/update status colors and adjust priority --- */
         .patient-name.tag-chou, .peripheral-patient-name.tag-chou { background-color: #90caf9 !important; }
-        .patient-name.tag-new, .peripheral-patient-name.tag-new { background-color: #fff176 !important; } /* Yellow for "新" */
-        /* 'hospitalized' class will be used for both '住' tag and IPD status */
-        .patient-name.hospitalized, .peripheral-patient-name.hospitalized { background-color: #ffcdd2 !important; } /* Red for Inpatient */
+        .patient-name.tag-new, .peripheral-patient-name.tag-new { background-color: #fff176 !important; }
+        .patient-name.hospitalized, .peripheral-patient-name.hospitalized { background-color: #ffcdd2 !important; }
         .patient-name.tag-huan, .peripheral-patient-name.tag-huan { background-color: #e3f2fd !important; }
         .patient-name.tag-liang, .peripheral-patient-name.tag-liang { background-color: #ffcc80 !important; }
         .patient-name.tag-b, .peripheral-patient-name.tag-b { background-color: #fffde7 !important; }
-        /* This is the new class for OPD patients, with the lowest priority */
-        .patient-name.status-opd, .peripheral-patient-name.status-opd { background-color: #e8f5e9 !important; } /* Green for Outpatient */
-        /* --- CHANGE END --- */
+        .patient-name.status-opd, .peripheral-patient-name.status-opd { background-color: #e8f5e9 !important; }
         
         .inpatient-sidebar { width: 240px; flex-shrink: 0; background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6; max-height: 80vh; display: flex; flex-direction: column;}
         .inpatient-sidebar h3 { margin-top: 0; text-align: center; border-bottom: 1px solid #dee2e6; padding-bottom: 10px; margin-bottom: 10px; }
@@ -89,7 +85,13 @@
         .filter-group button:hover { background-color: #f0f0f0; }
         .filter-group button.active { background-color: #007bff; color: white; border-color: #007bff; }
         #inpatient-list { list-style-type: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
-        #inpatient-list li { background-color: #fff; border: 1px solid #e0e0e0; padding: 8px 12px; margin-bottom: 8px; border-radius: 5px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+        #inpatient-list li { background-color: #fff; border: 1px solid #e0e0e0; padding: 8px 12px; margin-bottom: 8px; border-radius: 5px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; transition: background-color 0.3s; }
+        /* --- CHANGE START: Add highlight style for scheduled inpatients --- */
+        #inpatient-list li.scheduled-inpatient {
+            background-color: #fff59d;
+            border-left: 5px solid #007bff;
+        }
+        /* --- CHANGE END --- */
         .patient-info-row { display: flex; justify-content: space-between; width: 100%; align-items: center; }
         #inpatient-list li .name { font-weight: bold; font-size: 1.1em; }
         #inpatient-list li .mrn { font-size: 0.85em; color: #6c757d; }
@@ -314,27 +316,27 @@
             document.querySelectorAll('#early-shift-count').forEach(el => el.textContent = earlyCount);
             document.querySelectorAll('#noon-shift-count').forEach(el => el.textContent = noonCount);
             document.querySelectorAll('#late-shift-count').forEach(el => el.textContent = lateCount);
+            // --- CHANGE START: Update inpatient list whenever shift counts change ---
+            renderInpatientList();
+            // --- CHANGE END ---
         };
         
         function updatePatientCellStyle(patientCell) {
             if (!patientCell || !patientCell.textContent) {
-                // 清理樣式如果病人姓名被清空
                 patientCell.className = patientCell.className.split(' ').filter(c => !c.startsWith('tag-') && c !== 'hospitalized' && c !== 'status-opd').join(' ');
                 return;
             }
             
             const patientName = patientCell.textContent.trim();
             const patient = allPatients.find(p => p.name === patientName);
-            if (!patient) return; // 找不到病人資料，不作處理
+            if (!patient) return;
 
             const parentRow = patientCell.closest('.shift-row, .peripheral-shift-row');
             const tagElement = parentRow.querySelector('.patient-tag');
             const tagText = tagElement ? tagElement.textContent.toUpperCase() : '';
 
-            // 1. 清除所有舊的顏色樣式
             patientCell.className = patientCell.className.split(' ').filter(c => !c.startsWith('tag-') && c !== 'hospitalized' && c !== 'status-opd').join(' ');
 
-            // 2. 根據優先級套用新樣式
             let styleApplied = false;
 
             if (tagText.includes('抽')) {
@@ -354,15 +356,11 @@
                 styleApplied = true;
             }
 
-            // 如果已有備註樣式，則不再執行後續判斷
             if (styleApplied) return;
 
-            // 備註沒有樣式，接著判斷病人狀態
-            // '住' 標籤或病人狀態為 'ipd' 都顯示紅色
             if (tagText.includes('住') || patient.status === 'ipd') {
                 patientCell.classList.add('hospitalized');
             } 
-            // 如果以上條件都不滿足，且病人是門診，才顯示綠色
             else if (patient.status === 'opd') {
                 patientCell.classList.add('status-opd');
             }
@@ -455,6 +453,28 @@
                 setStatus('從週排班匯入失敗', 'error');
             }
         }
+        
+        // --- CHANGE START: Add helper and modify renderInpatientList ---
+        /**
+         * Checks if a patient is scheduled on the current day's view.
+         * It checks the content of the patient name cells directly.
+         * @param {string} patientId - The ID of the patient to check.
+         * @returns {boolean} - True if the patient is scheduled, false otherwise.
+         */
+        function isPatientScheduledToday(patientId) {
+            const patient = allPatients.find(p => p.id === patientId);
+            if (!patient) return false;
+
+            const patientName = patient.name;
+            const patientCells = document.querySelectorAll('.patient-name, .peripheral-patient-name');
+            
+            for (const cell of patientCells) {
+                if (cell.textContent.trim() === patientName) {
+                    return true;
+                }
+            }
+            return false;
+        }
 
         function renderInpatientList() {
             let inpatients = allPatients.filter(p => p.status === 'ipd' && !p.isDeleted);
@@ -474,6 +494,12 @@
             } else {
                 inpatients.forEach(p => {
                     const li = document.createElement('li');
+                    
+                    // Add highlight class if the patient is scheduled
+                    if (isPatientScheduledToday(p.id)) {
+                        li.classList.add('scheduled-inpatient');
+                    }
+                    
                     li.innerHTML = `
                         <div class="patient-info-row">
                             <span class="name">${p.name}</span>
@@ -487,6 +513,7 @@
                 });
             }
         }
+        // --- CHANGE END ---
 
         function renderDataToUI(scheduleData) {
             Object.keys(scheduleData).forEach(id => { 
