@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>洗腎室床位病人排程表 (V33.2 - 穩定版)</title>
+    <title>洗腎室床位病人排程表 (V33.3 - 終極穩定版)</title>
     <style>
+        /* CSS styles are correct and remain unchanged */
         body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .controls-panel { max-width: 1800px; margin: 0 auto 20px; padding: 15px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
         .controls-panel button { padding: 8px 15px; font-size: 1em; border-radius: 5px; border: 1px solid #ccc; background-color: #e9e9e9; cursor: pointer; transition: background-color 0.2s; }
@@ -94,7 +95,7 @@
         
         @page { size: A4 landscape; margin: 0.5cm; }
         @media print { 
-            /* Print styles remain the same */
+            /* Print styles are unchanged */
         }
     </style>
 </head>
@@ -172,11 +173,7 @@
         const aisleSideBeds = [1, 7, 8, 15, 16, 22, 23, 29, 31, 36, 37, 53, 55, 61, 62, 65];
         const hepatitisBeds = ['空', 31, 32, 33, 35, 36];
         const peripheralBedCount = 6;
-        const leftWing = document.getElementById('left-wing');
-        const rightWing = document.getElementById('right-wing');
-        const peripheralContainer = document.getElementById('peripheral-bed-container');
-        const inpatientList = document.getElementById('inpatient-list');
-        const filterGroup = document.querySelector('.filter-group');
+        
         const getStartOfWeek = (date) => { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(new Date(d.setDate(diff)).setHours(0, 0, 0, 0)); }
         const shiftToIndexMap = { '早': 0, '午': 1, '晚': 2 };
         const formatDate = (date) => { const year = date.getFullYear(); const month = (date.getMonth() + 1).toString().padStart(2, '0'); const day = date.getDate().toString().padStart(2, '0'); return `${year}-${month}-${day}`; };
@@ -190,7 +187,6 @@
             document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight'));
             document.querySelectorAll('.tag-chou, .tag-new, .hospitalized, .tag-huan, .tag-liang, .tag-b, .status-opd').forEach(el => el.classList.remove('tag-chou', 'tag-new', 'hospitalized', 'tag-huan', 'tag-liang', 'tag-b', 'status-opd'));
             updateShiftPatientCount();
-            setStatus('畫面已清空', 'unsaved');
         }
 
         const updateShiftPatientCount = () => {
@@ -247,22 +243,20 @@
                 const weekStartStr = formatDate(weekStartDate);
 
                 const [dailyScheduleRes, weeklyScheduleRes, patientsRes] = await Promise.all([
-                    fetch(`${API.schedules}?date=${dateStr}`),
-                    fetch(`${API.weeklySchedule}?weekStart=${weekStartStr}`),
-                    fetch(API.patients)
+                    fetch(`${API.schedules}?date=${dateStr}`).then(res => res.ok ? res.json() : []),
+                    fetch(`${API.weeklySchedule}?weekStart=${weekStartStr}`).then(res => res.ok ? res.json() : []),
+                    fetch(API.patients).then(res => res.ok ? res.json() : Promise.reject('無法獲取病人列表'))
                 ]);
 
-                if (!dailyScheduleRes.ok || !weeklyScheduleRes.ok || !patientsRes.ok) throw new Error('API請求失敗');
-
-                const dailySchedules = await dailyScheduleRes.json();
-                const weeklySchedulesRaw = await weeklyScheduleRes.json();
-                allPatients = (await patientsRes.json()).filter(p => !p.isDeleted);
+                const dailySchedules = dailyScheduleRes;
+                const weeklySchedulesRaw = weeklyScheduleRes;
+                allPatients = patientsRes.filter(p => !p.isDeleted);
                 
                 let finalSchedule = {};
                 let weeklyDataFound = false;
 
                 const dayOfWeek = date.getDay();
-                if (dayOfWeek !== 0) {
+                if (dayOfWeek !== 0 && weeklySchedulesRaw.length > 0) {
                     const weeklyDayIndex = dayOfWeek - 1;
                     const weeklyForToday = getTodaysWeeklySchedule(weeklySchedulesRaw, weeklyDayIndex);
                     if (Object.keys(weeklyForToday).length > 0) {
@@ -485,21 +479,25 @@
             const patientNameToId = new Map(allPatients.map(p => [p.name, p.id]));
 
             Object.values(dailyScheduleData).forEach(data => {
-                const parts = data.shiftId.split('-');
-                if (parts.length >= 3) {
-                    const bedShift = `${parts[1]}-${parts[2]}`;
-                    dailyPatientsOnSlot.set(bedShift, data.patient);
+                if(data.shiftId) {
+                    const parts = data.shiftId.split('-');
+                    if (parts.length >= 3) {
+                        const bedShift = `${parts[1]}-${parts[2]}`;
+                        dailyPatientsOnSlot.set(bedShift, data.patient);
+                    }
                 }
             });
 
             const toDeletePromises = [];
             allWeekSchedules.forEach(ws => {
-                const parts = ws.slotId.split('-');
-                if (parseInt(parts[2], 10) === weeklyDayIndex) {
-                    const shiftName = Object.keys(shiftToIndexMap).find(key => shiftToIndexMap[key] === parseInt(parts[1], 10));
-                    const bedShift = `${parts[0]}-${shiftName}`;
-                    if (!dailyPatientsOnSlot.has(bedShift)) {
-                       toDeletePromises.push(fetch(`${API.weeklySchedule}/${ws.id}`, { method: 'DELETE' }));
+                if (ws.slotId) {
+                    const parts = ws.slotId.split('-');
+                    if (parseInt(parts[2], 10) === weeklyDayIndex) {
+                        const shiftName = Object.keys(shiftToIndexMap).find(key => shiftToIndexMap[key] === parseInt(parts[1], 10));
+                        const bedShift = `${parts[0]}-${shiftName}`;
+                        if (!dailyPatientsOnSlot.has(bedShift)) {
+                           toDeletePromises.push(fetch(`${API.weeklySchedule}/${ws.id}`, { method: 'DELETE' }));
+                        }
                     }
                 }
             });
@@ -576,13 +574,13 @@
             loadDataForDay(formatDate(currentDate));
         }
 
+        // --- Event Listeners ---
         document.getElementById('prev-date-btn').addEventListener('click', () => changeDate(-1));
         document.getElementById('next-date-btn').addEventListener('click', () => changeDate(1));
         document.getElementById('today-btn').addEventListener('click', () => { currentDate = new Date(); updateDateDisplay(); loadDataForDay(formatDate(currentDate)); });
         document.getElementById('save-btn').addEventListener('click', saveDataToCloud);
         document.getElementById('print-btn').addEventListener('click', printSchedule);
         document.getElementById('search-btn').addEventListener('click', search);
-        
         document.getElementById('clear-all-btn').addEventListener('click', () => {
             if (currentRecord) {
                 if (confirm("偵測到本日雲端有排程資料，您要一併刪除嗎？\n\n- 按 [確定] 將會刪除雲端資料並清空畫面。\n- 按 [取消] 將只會清空目前畫面（下次載入時會重新同步）。")) {
@@ -598,9 +596,7 @@
                 }
             }
         });
-        
         document.getElementById('copy-schedule-btn').addEventListener('click', copySchedule);
-        
         document.addEventListener('input', (e) => {
             setStatus('內容已變更，尚未儲存', 'unsaved');
             e.target.closest('.shift-row, .peripheral-shift-row')?.classList.remove('newly-synced');
@@ -612,7 +608,6 @@
                 updatePatientCellStyle(e.target);
             }
         });
-
         filterGroup.addEventListener('click', (e) => {
             if (e.target.tagName === 'BUTTON') {
                 filterGroup.querySelector('.active').classList.remove('active');
@@ -622,6 +617,7 @@
             }
         });
 
+        // --- Initializer ---
         generateLayout();
         updateDateDisplay();
         loadDataForDay(formatDate(currentDate));
