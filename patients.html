@@ -1,219 +1,497 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>透析病人管理系統 (V2.0 - 最終穩定重構版)</title>
+    <title>透析病人管理系統</title>
     <style>
-        /* CSS 與 V1.9 完全相同 */
-        :root { --green-bg: #e8f5e9; --green-text: #2e7d32; --blue-bg: #e3f2fd;  --blue-text: #1565c0; --orange-bg: #fff3e0; --orange-text: #ef6c00; --grey-bg: #f5f5f5; --grey-text: #616161; --red-text: #c62828; }
-        body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f9f9f9; margin: 0; padding: 20px; }
-        .container { max-width: 1400px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .tabs { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 20px; }
-        .tab-button { padding: 10px 20px; border: none; background: none; font-size: 1.2em; cursor: pointer; position: relative; color: #666; }
-        .tab-button.active { color: #005a9c; font-weight: bold; }
-        .tab-button.active::after { content: ''; position: absolute; bottom: -2px; left: 0; right: 0; height: 2px; background-color: #005a9c; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 15px; }
-        .toolbar button { padding: 8px 15px; font-size: 1em; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        .toolbar button:hover { background-color: #0056b3; }
-        .stats-area { display: flex; gap: 20px; font-size: 0.9em; }
-        .patient-table { width: 100%; border-collapse: collapse; table-layout: auto; }
-        .patient-table th, .patient-table td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap; }
-        .patient-table td:nth-child(1), .patient-table#ipd-table-body td:nth-child(8), .patient-table#opd-table-body td:nth-child(7) { white-space: normal; }
-        .patient-table th { background-color: #f2f2f2; cursor: pointer; user-select: none; position: sticky; top: 0; }
-        .patient-table th:hover { background-color: #e8e8e8; }
-        .patient-table th .sort-indicator { display: inline-block; margin-left: 5px; color: #999; }
-        .patient-table tr.status-opd { background-color: var(--green-bg); }
-        .patient-table tr.status-ipd { background-color: var(--blue-bg); }
-        .patient-table tr.status-biweekly { background-color: var(--orange-bg); }
-        .patient-table tr.status-deleted { background-color: var(--grey-bg); color: var(--grey-text); }
-        .disease-tag { display: inline-block; margin-left: 8px; padding: 2px 6px; font-size: 0.8em; font-weight: bold; color: var(--red-text); border: 1px solid var(--red-text); border-radius: 4px; }
-        .action-buttons button { margin-right: 5px; padding: 4px 8px; font-size: 0.9em; border-radius: 3px; border: 1px solid #ccc; cursor: pointer; }
-        .table-wrapper { max-height: 60vh; overflow-y: auto; }
-        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
-        .modal-content { background-color: #fefefe; padding: 20px; border: 1px solid #888; width: 90%; max-width: 700px; border-radius: 8px; }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
-        .modal-header h2 { margin: 0; }
-        .close-button { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; }
-        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
-        .form-field { display: flex; flex-direction: column; }
-        .form-field label { margin-bottom: 5px; font-weight: bold; }
-        .form-field input, .form-field select, .form-field textarea { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box; }
-        .form-field-full { grid-column: 1 / -1; }
-        .form-group { border: 1px solid #e0e0e0; padding: 15px; border-radius: 5px; margin-top: 10px; }
-        .form-group legend { padding: 0 10px; font-weight: bold; color: #333; }
-        .checkbox-container { display: flex; flex-wrap: wrap; gap: 20px; }
-        .checkbox-group { display: flex; align-items: center; gap: 5px; }
-        .checkbox-group input[type="checkbox"] { width: auto; height: 1.2em; width: 1.2em; }
-        .checkbox-group label { font-weight: normal; margin-bottom: 0; }
-        .modal-footer { margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee; text-align: right; }
-        #delete-reason-dialog { border: 1px solid #ccc; border-radius: 8px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
-        #delete-reason-dialog::backdrop { background-color: rgba(0,0,0,0.5); }
-        #delete-reason-dialog h3 { margin-top: 0; }
-        #delete-reason-dialog .button-group { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
-        #delete-reason-dialog button { width: 100%; padding: 10px; font-size: 1em; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft JhengHei", Roboto, Arial, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 1.5rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            font-size: 1.8rem;
+            color: #2c3e50;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+        
+        .nav-tabs {
+            display: flex;
+            gap: 0.5rem;
+            border-bottom: 2px solid #e9ecef;
+            margin-bottom: 1.5rem;
+        }
+        
+        .nav-tab {
+            padding: 0.75rem 1.5rem;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-size: 1rem;
+            color: #666;
+            transition: all 0.3s;
+        }
+        
+        .nav-tab:hover {
+            color: #4a90e2;
+        }
+        
+        .nav-tab.active {
+            color: #4a90e2;
+            border-bottom-color: #4a90e2;
+            font-weight: 500;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .btn-primary {
+            background: #4a90e2;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #357abd;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
+        .main-content {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        
+        .patient-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+        
+        .patient-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+            transition: all 0.3s;
+        }
+        
+        .patient-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+            transform: translateY(-2px);
+        }
+        
+        .patient-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 1rem;
+        }
+        
+        .patient-name {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .patient-id {
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
+        }
+        
+        .patient-info {
+            display: grid;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .info-label {
+            color: #666;
+        }
+        
+        .info-value {
+            font-weight: 500;
+        }
+        
+        .patient-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e9ecef;
+        }
+        
+        .btn-small {
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+        }
+        
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .modal-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #666;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            transition: background 0.3s;
+        }
+        
+        .close-btn:hover {
+            background: #f0f0f0;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: #4a90e2;
+        }
+        
+        .modal-footer {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 2rem;
+        }
+        
+        @media (max-width: 768px) {
+            .patient-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .action-buttons {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>透析病人管理系統</h1>
-        <div class="tabs">
-            <button class="tab-button active" data-tab="ipd">住院病人</button>
-            <button class="tab-button" data-tab="opd">門診常規</button>
-            <button class="tab-button" data-tab="deleted">已刪除病人</button>
-        </div>
-        <div id="ipd" class="tab-content active"><div class="toolbar"><button id="add-ipd-btn">新增住院病人</button><div class="stats-area" id="ipd-stats"></div></div><div class="table-wrapper"><table class="patient-table"><thead id="ipd-table-head"></thead><tbody id="ipd-table-body"></tbody></table></div></div>
-        <div id="opd" class="tab-content"><div class="toolbar"><button id="add-opd-btn">新增門診病人</button><div class="stats-area" id="opd-stats"></div></div><div class="table-wrapper"><table class="patient-table"><thead id="opd-table-head"></thead><tbody id="opd-table-body"></tbody></table></div></div>
-        <div id="deleted" class="tab-content"><div class="toolbar"><div>已刪除病人紀錄</div></div><div class="table-wrapper"><table class="patient-table"><thead id="deleted-table-head"></thead><tbody id="deleted-table-body"></tbody></table></div></div>
-    </div>
-    <div id="patient-modal" class="modal"><div class="modal-content"><div class="modal-header"><h2 id="modal-title">病人資料</h2><span class="close-button">×</span></div><div id="modal-form-content"></div></div></div>
-    <dialog id="delete-reason-dialog"><h3>請選擇刪除原因</h3><div id="delete-reason-options" class="button-group"></div><div class="button-group"><button id="delete-cancel-btn" value="cancel">取消</button></div></dialog>
-    <template id="ipd-form-template"><form id="patient-form"><input type="hidden" id="patient-id"><input type="hidden" id="patient-type" value="ipd"><div class="form-grid"><div class="form-field"><label for="name">姓名</label><input type="text" id="name" required></div><div class="form-field"><label for="medical-record-number">病歷號</label><input type="text" id="medical-record-number" required></div><div class="form-field"><label for="physician">會診醫師</label><select id="physician"></select></div><div class="form-field"><label for="frequency">透析頻率</label><select id="frequency"></select></div><div class="form-field"><label for="mode">透析模式</label><select id="mode"></select></div><fieldset class="form-group form-field-full"><legend>須注意疾病</legend><div id="disease-checkboxes" class="checkbox-container"></div></fieldset><fieldset class="form-group form-field-full"><legend>狀態標記</legend><div class="checkbox-container"><div class="checkbox-group"><input type="checkbox" id="is-first-dialysis"><label for="is-first-dialysis">首透</label></div><div class="checkbox-group"><input type="checkbox" id="is-discontinued"><label for="is-discontinued">中止透析</label></div></div></fieldset><div class="form-field form-field-full"><label for="remarks">備註</label><textarea id="remarks" rows="3"></textarea></div></div><div class="modal-footer"><button type="submit">儲存</button></div></form></template>
-    <template id="opd-form-template"><form id="patient-form"><input type="hidden" id="patient-id"><input type="hidden" id="patient-type" value="opd"><div class="form-grid"><div class="form-field"><label for="name">姓名</label><input type="text" id="name" required></div><div class="form-field"><label for="medical-record-number">病歷號</label><input type="text" id="medical-record-number" required></div><div class="form-field"><label for="physician">收案醫師</label><select id="physician"></select></div><div class="form-field"><label for="frequency">透析頻率</label><select id="frequency"></select></div><div class="form-field"><label for="mode">透析模式</label><select id="mode"></select></div><div class="form-field"><label for="vasc-access">目前血管通路</label><select id="vasc-access"></select></div><div class="form-field"><label for="first-dialysis-date">首次透析日期</label><input type="date" id="first-dialysis-date"></div><div class="form-field"><label for="access-creation-date">通路建立日期</label><input type="date" id="access-creation-date"></div><fieldset class="form-group form-field-full"><legend>須注意疾病</legend><div id="disease-checkboxes" class="checkbox-container"></div></fieldset><div class="form-field form-field-full"><label for="remarks">備註</label><textarea id="remarks" rows="3"></textarea></div></div><div class="modal-footer"><button type="submit">儲存</button></div></form></template>
-    <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const API_BASE_URL = 'https://684eb206f0c9c9848d28d637.mockapi.io/patients';
-        const PHYSICIANS = ['廖丁瑩', '蔡宜潔', '蘇哲弘', '蔡亨政'];
-        const FREQUENCIES = ['一三五', '二四六', '一四', '二五', '三六', '一五', '二六', '每周一次', '臨時'];
-        const MODES = ['HD', 'SLED', 'CVVHDF', 'PP', 'DFPP'];
-        const VASC_ACCESSES = ['Double lumen', 'PERM', '左手AVF', '右手AVF', '左手AVG', '右手AVG'];
-        const DISEASES = ['HIV', 'RPR', 'HBV', 'HCV', '隔離'];
-        const DELETE_REASONS = ['出院', '死亡', '轉外院透析', '轉PD或其他'];
-        
-        let allPatients = [];
-        let currentSort = { column: 'createdAt', order: 'desc' };
-        
-        const tabButtons = document.querySelectorAll('.tab-button');
-        const tabContents = document.querySelectorAll('.tab-content');
-        const modal = document.getElementById('patient-modal');
-        const modalTitle = document.getElementById('modal-title');
-        const modalFormContent = document.getElementById('modal-form-content');
-        const deleteDialog = document.getElementById('delete-reason-dialog');
-        
-        const formatDate = (isoString) => isoString ? new Date(isoString).toLocaleDateString() : '';
-
-        async function fetchAllPatients() {
-            try {
-                const response = await fetch(API_BASE_URL);
-                if (!response.ok) throw new Error('Network error');
-                allPatients = await response.json();
-                renderAllTables();
-            } catch (error) {
-                console.error("Failed to fetch patients:", error);
-                alert("讀取病人資料失敗，請檢查網路連線。");
-            }
-        }
-
-        function renderAllTables() {
-            renderTable('ipd');
-            renderTable('opd');
-            renderTable('deleted');
-            updateStats();
-        }
-
-        function renderTable(type) {
-            const headersConfig = {
-                ipd: ['姓名', '病歷號', {key: 'physician', text:'會診醫師'}, {key: 'frequency', text:'頻率'}, '模式', '首透', '中止', '備註', {key: 'createdAt', text: '新增日期'}],
-                opd: ['姓名', '病歷號', {key: 'physician', text:'收案醫師'}, {key: 'frequency', text:'頻率'}, '模式', '血管通路', '備註', {key: 'createdAt', text: '新增日期'}],
-                deleted: ['姓名', '病歷號', '原狀態', '刪除原因', '備註', {key: 'deletedAt', text: '刪除日期'}]
-            };
-            const headers = headersConfig[type];
-            const tableHead = document.getElementById(`${type}-table-head`);
-            const tableBody = document.getElementById(`${type}-table-body`);
-            tableHead.innerHTML = `<tr>${headers.map(h => {
-                const key = (typeof h === 'object' ? h.key : h).toString().toLowerCase();
-                const text = typeof h === 'object' ? h.text : h;
-                return `<th data-sort-key="${key}">${text} <span class="sort-indicator"></span></th>`;
-            }).join('')}<th>操作</th></tr>`;
-            const patients = allPatients.filter(p => (type === 'deleted' ? p.status === 'deleted' : p.status === type && !p.isDeleted));
-            sortPatients(patients);
-            tableBody.innerHTML = patients.map(p => {
-                const rowClass = getRowClass(p);
-                let rowContent = '';
-                if (type === 'ipd') {
-                    rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.isFirstDialysis ? '✓' : ''}</td><td>${p.isDiscontinued ? '✓' : ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td><td class="action-buttons"><button data-action="edit" data-id="${p.id}">編輯</button><button data-action="transfer" data-id="${p.id}">轉門診</button><button data-action="delete" data-id="${p.id}">刪除</button></td>`;
-                } else if (type === 'opd') {
-                    rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.vascAccess || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td><td class="action-buttons"><button data-action="edit" data-id="${p.id}">編輯</button><button data-action="delete" data-id="${p.id}">刪除</button></td>`;
-                } else {
-                    rowContent = `<td>${p.name || ''}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.originalStatus === 'ipd' ? '住院' : '門診'}</td><td>${p.deleteReason || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.deletedAt)}</td><td><button data-action="restore" data-id="${p.id}">復原</button></td>`;
-                }
-                return `<tr class="${rowClass}">${rowContent}</tr>`;
-            }).join('');
-            tableHead.querySelectorAll('th[data-sort-key]').forEach(th => {
-                const key = th.dataset.sortKey;
-                const indicator = th.querySelector('.sort-indicator');
-                indicator.textContent = (key === currentSort.column) ? (currentSort.order === 'asc' ? '▲' : '▼') : '';
-                th.addEventListener('click', () => handleSort(key));
-            });
-        }
-        
-        function handleSort(key) { if (currentSort.column === key) { currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc'; } else { currentSort.column = key; currentSort.order = 'asc'; } renderAllTables(); };
-        const updateStats = () => {const ipdPatients = allPatients.filter(p => p.status === 'ipd' && !p.isDeleted);const opdPatients = allPatients.filter(p => p.status === 'opd' && !p.isDeleted);const ipdStatsDiv = document.getElementById('ipd-stats');const opdStatsDiv = document.getElementById('opd-stats');const generateStatsHTML = (patients) => {if (patients.length === 0) return '總人數: 0';const freqCounts = patients.reduce((acc, p) => {acc[p.frequency] = (acc[p.frequency] || 0) + 1;return acc;}, {});const freqString = Object.entries(freqCounts).map(([freq, count]) => `${freq || '未分類'}: ${count}人`).join(', ');return `總人數: ${patients.length} (${freqString})`;};ipdStatsDiv.innerHTML = generateStatsHTML(ipdPatients);opdStatsDiv.innerHTML = generateStatsHTML(opdPatients);};
-        const getRowClass = (p) => {if (p.status === 'deleted') return 'status-deleted';const biweeklyFreq = ['一四', '二五', '三六', '一五', '二六'];if (biweeklyFreq.includes(p.frequency)) return 'status-biweekly';if (p.status === 'ipd') return 'status-ipd';if (p.status === 'opd') return 'status-opd';return '';};
-        const generateDiseaseTags = (d) => {if (!d || d.length === 0) return '';return d.map(tag => `<span class="disease-tag">${tag}</span>`).join('');};
-        const sortPatients = (p) => {p.sort((a, b) => {const valA = a[currentSort.column] || '';const valB = b[currentSort.column] || '';const compare = String(valA).localeCompare(String(valB), 'zh-Hant');return currentSort.order === 'asc' ? compare : -compare;});};
-        const openModal = (type, patient = null) => {const templateId = type === 'ipd' ? 'ipd-form-template' : 'opd-form-template';const template = document.getElementById(templateId);modalFormContent.innerHTML = '';modalFormContent.appendChild(template.content.cloneNode(true));const form = modalFormContent.querySelector('form');const populateSelect = (selectId, options) => {const select = form.querySelector(`#${selectId}`);if (select) select.innerHTML = '<option value="">請選擇</option>' + options.map(o => `<option value="${o}">${o}</option>`).join('');};populateSelect('physician', PHYSICIANS);populateSelect('frequency', FREQUENCIES);populateSelect('mode', MODES);populateSelect('vasc-access', VASC_ACCESSES);const diseaseContainer = form.querySelector('#disease-checkboxes');if(diseaseContainer) {diseaseContainer.innerHTML = DISEASES.map(d => `<div class="checkbox-group"><input type="checkbox" id="disease-${d}" name="disease" value="${d}"><label for="disease-${d}">${d}</label></div>`).join('');}modalTitle.textContent = patient ? `編輯${type === 'ipd' ? '住院' : '門診'}病人` : `新增${type === 'ipd' ? '住院' : '門診'}病人`;if (patient) {form.querySelector('#patient-id').value = patient.id;form.querySelector('#name').value = patient.name || '';form.querySelector('#medical-record-number').value = patient.medicalRecordNumber || '';form.querySelector('#physician').value = patient.physician || '';form.querySelector('#frequency').value = patient.frequency || '';form.querySelector('#mode').value = patient.mode || '';form.querySelector('#remarks').value = patient.remarks || '';form.querySelectorAll('input[name="disease"]').forEach(cb => {cb.checked = patient.diseases && patient.diseases.includes(cb.value);});if (type === 'ipd') {form.querySelector('#is-first-dialysis').checked = patient.isFirstDialysis || false;form.querySelector('#is-discontinued').checked = patient.isDiscontinued || false;} else {form.querySelector('#first-dialysis-date').value = patient.firstDialysisDate || '';form.querySelector('#access-creation-date').value = patient.accessCreationDate || '';form.querySelector('#vasc-access').value = patient.vascAccess || '';}}form.addEventListener('submit', handleFormSubmit);modal.style.display = 'flex';};
-        const closeModal = () => {modal.style.display = 'none';modalFormContent.innerHTML = '';};
-        
-        const handleFormSubmit = async (e) => {
-            e.preventDefault();
-            const form = e.target;
-            const id = form.querySelector('#patient-id').value;
-            const type = form.querySelector('#patient-type').value;
-            const selectedDiseases = Array.from(form.querySelectorAll('input[name="disease"]:checked')).map(cb => cb.value);
-            let patientData = { name: form.querySelector('#name').value, medicalRecordNumber: form.querySelector('#medical-record-number').value, physician: form.querySelector('#physician').value, frequency: form.querySelector('#frequency').value, mode: form.querySelector('#mode').value, remarks: form.querySelector('#remarks').value, diseases: selectedDiseases, status: type, isDeleted: false };
-            if (type === 'ipd') { patientData.isFirstDialysis = form.querySelector('#is-first-dialysis').checked; patientData.isDiscontinued = form.querySelector('#is-discontinued').checked; } else { patientData.firstDialysisDate = form.querySelector('#first-dialysis-date').value; patientData.accessCreationDate = form.querySelector('#access-creation-date').value; patientData.vascAccess = form.querySelector('#vasc-access').value; }
-            const url = id ? `${API_BASE_URL}/${id}` : API_BASE_URL;
-            const method = id ? 'PUT' : 'POST';
-            if (!id) { patientData.createdAt = new Date().toISOString(); }
-            try {
-                const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patientData) });
-                if (!response.ok) throw new Error('Save error');
-                await fetchAllPatients(); // 操作成功後，重新從伺服器獲取完整列表，確保資料同步
-                closeModal();
-            } catch (error) { console.error("Save failed:", error); alert("儲存失敗！"); }
-        };
-
-        const updatePatientField = async (id, dataToUpdate) => {
-            try {
-                const response = await fetch(`${API_BASE_URL}/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToUpdate) });
-                if (!response.ok) throw new Error('Update error');
-                await fetchAllPatients();
-            } catch (error) { console.error("Update failed:", error); alert("操作失敗！"); }
-        };
-        const transferToOpd = (id) => { if (confirm('確定要將此病人轉為門診常規嗎？')) updatePatientField(id, { status: 'opd' }); };
-        const archivePatient = (id, reason) => { const patient = allPatients.find(p => p.id === id); updatePatientField(id, { isDeleted: true, status: 'deleted', originalStatus: patient.status, deleteReason: reason, deletedAt: new Date().toISOString() }); };
-        const restorePatient = (id) => { const patient = allPatients.find(p => p.id === id); if (patient && confirm(`確定要將病人「${patient.name}」復原到「${patient.originalStatus === 'ipd' ? '住院' : '門診'}」列表嗎？`)) updatePatientField(id, { isDeleted: false, status: patient.originalStatus, deleteReason: null, deletedAt: null }); };
-        const deletePatient = (id) => { const optionsContainer = document.getElementById('delete-reason-options'); optionsContainer.innerHTML = DELETE_REASONS.map(reason => `<button value="${reason}">${reason}</button>`).join(''); const handleReasonSelection = (event) => { const selectedReason = event.target.value; if(selectedReason && selectedReason !== 'cancel') { archivePatient(id, selectedReason); } deleteDialog.close(); }; optionsContainer.addEventListener('click', handleReasonSelection, { once: true }); document.getElementById('delete-cancel-btn').addEventListener('click', () => deleteDialog.close(), { once: true }); deleteDialog.showModal(); };
-        
-        // --- Event Listeners using Event Delegation ---
-        document.querySelector('.container').addEventListener('click', (e) => {
-            const target = e.target;
-            const action = target.dataset.action;
-            const id = target.dataset.id;
+    <header class="header">
+        <div class="header-content">
+            <h1>透析病人管理系統 (V2.1 - API更新版)</h1>
             
-            if (action && id) {
-                switch(action) {
-                    case 'edit': openModal(allPatients.find(p => p.id === id)?.status, allPatients.find(p => p.id === id)); break;
-                    case 'transfer': transferToOpd(id); break;
-                    case 'delete': deletePatient(id); break;
-                    case 'restore': restorePatient(id); break;
-                }
-            } else if (target.id === 'add-ipd-btn') {
-                openModal('ipd');
-            } else if (target.id === 'add-opd-btn') {
-                openModal('opd');
+            <nav class="nav-tabs">
+                <button class="nav-tab active" data-tab="inpatient">住院病人</button>
+                <button class="nav-tab" data-tab="outpatient">門診常規</button>
+                <button class="nav-tab" data-tab="deleted">已刪除病人</button>
+            </nav>
+            
+            <div class="action-buttons">
+                <button class="btn btn-primary" id="addInpatientBtn">
+                    <span>➕</span> 新增住院病人
+                </button>
+                <button class="btn btn-primary" id="addOutpatientBtn">
+                    <span>➕</span> 新增門診病人
+                </button>
+                <button class="btn btn-secondary" id="deletedRecordsBtn">
+                    <span>📋</span> 已刪除病人紀錄
+                </button>
+            </div>
+        </div>
+    </header>
+    
+    <main class="main-content">
+        <div class="patient-grid" id="patientGrid">
+            <!-- 病人卡片範例 -->
+            <div class="patient-card">
+                <div class="patient-header">
+                    <div>
+                        <div class="patient-name">王小明</div>
+                        <div class="patient-id">病歷號: A123456789</div>
+                    </div>
+                </div>
+                <div class="patient-info">
+                    <div class="info-row">
+                        <span class="info-label">透析頻率:</span>
+                        <span class="info-value">一三五</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">班別:</span>
+                        <span class="info-value">早班</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">床號:</span>
+                        <span class="info-value">A-01</span>
+                    </div>
+                </div>
+                <div class="patient-actions">
+                    <button class="btn btn-primary btn-small">編輯</button>
+                    <button class="btn btn-danger btn-small">刪除</button>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <!-- 病人資料 Modal -->
+    <div class="modal" id="patientModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">病人資料</h2>
+                <button class="close-btn" id="closeModalBtn">✕</button>
+            </div>
+            
+            <form id="patientForm">
+                <div class="form-group">
+                    <label class="form-label" for="patientName">姓名</label>
+                    <input type="text" class="form-control" id="patientName" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="patientId">病歷號</label>
+                    <input type="text" class="form-control" id="patientId" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="frequency">透析頻率</label>
+                    <select class="form-control" id="frequency">
+                        <option value="135">一三五</option>
+                        <option value="246">二四六</option>
+                        <option value="other">其他</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="shift">班別</label>
+                    <select class="form-control" id="shift">
+                        <option value="morning">早班</option>
+                        <option value="afternoon">午班</option>
+                        <option value="evening">晚班</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="bedNumber">床號</label>
+                    <input type="text" class="form-control" id="bedNumber">
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="cancelBtn">取消</button>
+                    <button type="submit" class="btn btn-primary">儲存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- 刪除確認 Modal -->
+    <div class="modal" id="deleteModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">刪除病人資料</h2>
+                <button class="close-btn" id="closeDeleteModalBtn">✕</button>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">請選擇刪除原因</label>
+                <select class="form-control" id="deleteReason">
+                    <option value="">請選擇...</option>
+                    <option value="transfer">轉院</option>
+                    <option value="deceased">過世</option>
+                    <option value="kidney_transplant">腎臟移植</option>
+                    <option value="other">其他</option>
+                </select>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancelDeleteBtn">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteBtn">確認刪除</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Tab 切換功能
+        document.querySelectorAll('.nav-tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                
+                // 這裡可以加入切換內容的邏輯
+                const tabName = this.dataset.tab;
+                console.log('切換到:', tabName);
+            });
+        });
+        
+        // Modal 控制
+        const patientModal = document.getElementById('patientModal');
+        const deleteModal = document.getElementById('deleteModal');
+        
+        // 開啟新增病人 Modal
+        document.getElementById('addInpatientBtn').addEventListener('click', () => {
+            patientModal.classList.add('active');
+        });
+        
+        document.getElementById('addOutpatientBtn').addEventListener('click', () => {
+            patientModal.classList.add('active');
+        });
+        
+        // 關閉 Modal
+        document.getElementById('closeModalBtn').addEventListener('click', () => {
+            patientModal.classList.remove('active');
+        });
+        
+        document.getElementById('cancelBtn').addEventListener('click', () => {
+            patientModal.classList.remove('active');
+        });
+        
+        document.getElementById('closeDeleteModalBtn').addEventListener('click', () => {
+            deleteModal.classList.remove('active');
+        });
+        
+        document.getElementById('cancelDeleteBtn').addEventListener('click', () => {
+            deleteModal.classList.remove('active');
+        });
+        
+        // 表單提交
+        document.getElementById('patientForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            // 這裡加入儲存邏輯
+            console.log('儲存病人資料');
+            patientModal.classList.remove('active');
+        });
+        
+        // 點擊 Modal 外部關閉
+        window.addEventListener('click', (e) => {
+            if (e.target === patientModal) {
+                patientModal.classList.remove('active');
+            }
+            if (e.target === deleteModal) {
+                deleteModal.classList.remove('active');
             }
         });
-
-        tabButtons.forEach(button => { button.addEventListener('click', (e) => { const targetTab = e.currentTarget.dataset.tab; tabButtons.forEach(btn => btn.classList.remove('active')); tabContents.forEach(content => content.classList.remove('active')); e.currentTarget.classList.add('active'); document.getElementById(targetTab).classList.add('active'); }); });
-        document.querySelector('.close-button').addEventListener('click', closeModal);
-        window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-        
-        fetchAllPatients();
-    });
     </script>
 </body>
 </html>
