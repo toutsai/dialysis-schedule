@@ -2,9 +2,9 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>護理師組別統計報表 (V24.0 - 統一數據源與拖曳功能版)</title>
+    <title>護理師組別統計報表 (V24.1 - 多源病人數據讀取修正版)</title>
     <style>
-        /* CSS inalterado */
+        /* CSS is unchanged */
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; padding: 20px; background-color: #f9f9f9; }
         .top-bar { display: flex; justify-content: space-between; align-items: center; max-width: 100%; margin: 0 auto 20px; }
         h1 { text-align: center; color: #333; flex-grow: 1; }
@@ -35,12 +35,8 @@
         .patient-list-cell .tag-huan { background-color: #e3f2fd !important; }
         .patient-list-cell .tag-liang { background-color: #ffcc80 !important; }
         .patient-list-cell .tag-b { background-color: #ffe0b2 !important; }
-
-        /* --- CHANGE START: Add style for new save button for dragging --- */
         #save-groups-btn { background-color: #ff9800; color: white; border-color: #ff9800; display: none; }
-        /* --- CHANGE END --- */
-        
-        @media print { body { padding: 10px; background-color: #fff; font-size: 8pt; } .controls, h1, .top-bar, .status-indicator { display: none; } .container { max-width: 100%; } .table-container { box-shadow: none; } .name-select { -webkit-appearance: none; -moz-appearance: none; appearance: none; background-color: transparent; } .patient-list-cell span { background-color: inherit !important; -webkit-print-color-adjust: exact; color-adjust: exact; cursor: default; } }
+        @media print { /* ... */ }
     </style>
 </head>
 <body>
@@ -56,9 +52,7 @@
         <div class="controls">
             <button id="save-names-btn">儲存護理師姓名</button>
             <button id="clear-names-btn">清空護理師姓名</button>
-            <!-- --- CHANGE START: Add new save button for dragging --- -->
             <button id="save-groups-btn">儲存組別變更</button>
-            <!-- --- CHANGE END --- -->
             <button onclick="window.print()">列印報表</button>
             <div id="status-indicator" class="status-indicator"></div>
         </div>
@@ -77,11 +71,16 @@
     </div>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // --- CHANGE START: Use the new unified endpoint ---
-        const API_BASE_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/daily_records';
-        // --- CHANGE END ---
+        const API = {
+            daily_records: 'https://6852ef850594059b23cfaa4f.mockapi.io/daily_records',
+            patients_ipd: 'https://6852ef850594059b23cfaa4f.mockapi.io/patients_ipd',
+            patients_opd_1: 'https://6852ef850594059b23cfaa4f.mockapi.io/patients_opd_1',
+            patients_opd_2: 'https://6852ef850594059b23cfaa4f.mockapi.io/patients_opd_2',
+            patients_opd_3: 'https://6852ef850594059b23cfaa4f.mockapi.io/patients_opd_3'
+        };
         let currentDate = new Date();
         let currentRecord = null;
+        let allPatients = []; // Add this to store patient data
         
         const statusIndicator = document.getElementById('status-indicator');
         const dateDisplay = document.getElementById('current-date-display');
@@ -89,31 +88,50 @@
         const lateTable = document.getElementById('late-shift-table');
         const saveNamesBtn = document.getElementById('save-names-btn');
         const clearNamesBtn = document.getElementById('clear-names-btn');
-        // --- CHANGE START: Get new button and track group changes ---
         const saveGroupsBtn = document.getElementById('save-groups-btn');
         let hasGroupChanges = false;
-        // --- CHANGE END ---
 
         const baseTeams = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', '外圍'];
         const nurseNameList = [ "陳素秋", "古孟麗", "謝常菁", "林玉麗", "陳聖柔", "田姿瑛", "陳韋吟", "劉姿秀", "劉舒婷", "李慈賢", "黃羿寧", "高佩鳳", "林沛儀", "李汶娟", "陳芃諭", "葛孟萍", "蘇愛玲", "郭芳君", "林馨如", "賴秋妏", "胡國暄", "施艾利", "陳淑玲", "謝慶諭", "林佩佳", "吳思婷", "曾佩君", "吳幸美" ];
         const nurseOptionsHTML = `<option value=""></option>` + nurseNameList.map(name => `<option value="${name}">${name}</option>`).join('');
         
-        const formatDate = (date) => { /* ... no change ... */ };
-        const setStatus = (message) => { /* ... no change ... */ };
+        const formatDate = (date) => { const year = date.getFullYear(); const month = (date.getMonth() + 1).toString().padStart(2, '0'); const day = date.getDate().toString().padStart(2, '0'); return `${year}-${month}-${day}`; };
+        const setStatus = (message) => { statusIndicator.textContent = message; };
 
+        // --- CHANGE START: Unified patient data fetching ---
+        async function fetchAllActivePatients() {
+            const patientEndpoints = [
+                API.patients_ipd,
+                API.patients_opd_1,
+                API.patients_opd_2,
+                API.patients_opd_3,
+            ];
+            try {
+                const fetchPromises = patientEndpoints.map(url => fetch(url).then(res => res.ok ? res.json() : []));
+                const results = await Promise.all(fetchPromises);
+                allPatients = [].concat(...results).filter(p => p.isDeleted !== true);
+            } catch (error) {
+                console.error("Failed to fetch all patient data:", error);
+                allPatients = [];
+            }
+        }
+        // --- CHANGE END ---
+        
         async function loadStatsFromCloud(dateStr) {
             earlyTable.innerHTML = '';
             lateTable.innerHTML = '';
             currentRecord = null;
-            // --- CHANGE START: Reset change tracking state ---
             hasGroupChanges = false;
             saveGroupsBtn.style.display = 'none';
-            // --- CHANGE END ---
             setStatus('讀取中...');
             
             try {
-                // The API endpoint is now daily_records
-                const response = await fetch(`${API_BASE_URL}?date=${dateStr}`);
+                // Fetch patients and schedule simultaneously
+                const [_, response] = await Promise.all([
+                    fetchAllActivePatients(),
+                    fetch(`${API.daily_records}?date=${dateStr}`)
+                ]);
+
                 if (!response.ok) throw new Error('Network error');
                 const data = await response.json();
                 
@@ -136,11 +154,7 @@
             const dataToPatch = { names: namesObject };
             setStatus('儲存中...');
             try {
-                const response = await fetch(`${API_BASE_URL}/${currentRecord.id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(dataToPatch)
-                });
+                const response = await fetch(`${API.daily_records}/${currentRecord.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToPatch) });
                 if (!response.ok) throw new Error('Save error');
                 currentRecord.names = namesObject;
                 const action = Object.keys(namesObject).length > 0 ? '儲存' : '清空';
@@ -152,26 +166,13 @@
             }
         }
         
-        // --- CHANGE START: New function to save group changes ---
         async function saveGroupsToCloud() {
-            if (!currentRecord || !hasGroupChanges) {
-                alert('沒有組別變更需要儲存。');
-                return;
-            }
-
-            const dataToPatch = {
-                schedule: currentRecord.schedule
-            };
-
+            if (!currentRecord || !hasGroupChanges) { alert('沒有組別變更需要儲存。'); return; }
+            const dataToPatch = { schedule: currentRecord.schedule };
             setStatus('儲存組別變更中...');
             try {
-                const response = await fetch(`${API_BASE_URL}/${currentRecord.id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(dataToPatch)
-                });
+                const response = await fetch(`${API.daily_records}/${currentRecord.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToPatch) });
                  if (!response.ok) throw new Error('Save error');
-
                 hasGroupChanges = false;
                 saveGroupsBtn.style.display = 'none';
                 setStatus(`組別資料已於 ${new Date().toLocaleTimeString()} 儲存成功`);
@@ -181,99 +182,27 @@
                 setStatus('儲存失敗');
             }
         }
-        // --- CHANGE END ---
 
-        function clearNames() { /* ... no change ... */ }
-
-        // --- CHANGE START: Adapt data parsing to new structure and add drag listeners ---
+        function clearNames() {
+            if (!currentRecord) { alert("目前沒有資料可清空。"); return; }
+            if (confirm("確定要清空本日所有的護理師姓名嗎？此操作將會儲存至雲端。")) {
+                document.querySelectorAll('.name-select').forEach(select => { select.value = ''; });
+                saveNamesToCloud({});
+            }
+        }
+        
+        // --- CHANGE START: Adapt data parsing to use allPatients list ---
         function loadReportData(fullData) {
             const { schedule, names } = fullData;
-            const statsData = {};
-            const allNurseTeams = [...baseTeams.map(t => `早${t}`), ...baseTeams.map(t => `晚${t}`), '午班(上針)', '午班(收針)']; //午班分開處理
-            allNurseTeams.forEach(team => { statsData[team] = []; });
-
-            // The main `schedule` object now holds all info
-            Object.entries(schedule).forEach(([slotKey, slotData]) => {
-                const { patientId, tag, nurse, nurse_in, nurse_out } = slotData;
-                if (!patientId) return;
-
-                const patient = { id: patientId, name: "未知病人" }; // Placeholder, assuming patient list not needed here
-                const patientNameInSchedule = Object.values(fullData.schedule).find(s => s.patientId === patientId)?.patientNameInSchedule || patient.name; // This part is tricky without patient list. Let's just use the main name from the schedule itself for now. It might need a small adjustment if we need more info.
-                
-                // Let's parse the info from slotData for the patient display string
-                // Example: We need to reconstruct the "bed - patientName (tag)" string
-                // This requires a bit of assumption about slotKey format e.g. "1-0" or "peripheral-1-0"
-                const keyParts = slotKey.split('-');
-                let bedDisplay;
-                if(slotKey.startsWith('peripheral')){
-                    bedDisplay = slotData.bedNumber || `外圍${keyParts[1]}`;
-                } else {
-                    bedDisplay = keyParts[0];
-                }
-                const tagDisplay = tag ? ` (${tag})` : '';
-                // For this to work, we'd ideally pass the full patient list or have name in slotData.
-                // Assuming we can find the name. A simplified approach:
-                const patientInfoString = `${bedDisplay} - [病人名]${tagDisplay}`; // We will add patient name later
-
-                const patientInfo = {
-                    slotKey: slotKey, // Store the key to identify the patient in the main schedule object
-                    displayText: patientInfoString // Display text, name to be filled
-                };
-
-                if (nurse && statsData[nurse]) { statsData[nurse].push(patientInfo); }
-                if (nurse_in && statsData['午班(上針)']) { statsData['午班(上針)'].push(patientInfo); }
-                if (nurse_out && statsData['午班(收針)']) { statsData['午班(收針)'].push(patientInfo); }
-            });
-            
-            // Refined data structure now. Let's try to populate the patient list more accurately.
-            const patientListFromSchedule = {};
-            for (const key in schedule) {
-                 const pId = schedule[key].patientId;
-                 patientListFromSchedule[pId] = patientListFromSchedule[pId] || { name: pId };
-            }
-             
-            const finalStatsData = {};
-            allNurseTeams.forEach(team => finalStatsData[team] = []);
-            
-            Object.keys(schedule).forEach(slotKey => {
-                 const slot = schedule[slotKey];
-                 if (!slot.patientId) return;
-                 
-                 let bedDisplay;
-                 if (slotKey.startsWith('peripheral')) {
-                     bedDisplay = slot.bedNumber || `外圍${slotKey.split('-')[1]}`;
-                 } else {
-                     bedDisplay = slotKey.split('-')[0];
-                 }
-                 const tagDisplay = slot.tag ? ` (${slot.tag})` : '';
-
-                // This part is a placeholder. For real name, we'd need to fetch patients list.
-                const patientName = `病人${slot.patientId.slice(-3)}`;
-                const displayText = `${bedDisplay} - ${patientName}${tagDisplay}`;
-                
-                const patientInfo = { slotKey, displayText };
-
-                // Now populate based on the nurse fields in the slot
-                const [bed, shiftIndex] = slotKey.split('-');
-                if(shiftIndex === '0') { // Early shift
-                    if (slot.nurse && finalStatsData[slot.nurse]) finalStatsData[slot.nurse].push(patientInfo);
-                } else if (shiftIndex === '2') { // Late shift
-                    if (slot.nurse && finalStatsData[slot.nurse]) finalStatsData[slot.nurse].push(patientInfo);
-                } else if (shiftIndex === '1') { // Noon shift
-                    if(slot.nurse_in && finalStatsData[slot.nurse_in]) finalStatsData[slot.nurse_in].push({ ...patientInfo, type: 'noon_in'});
-                    if(slot.nurse_out && finalStatsData[slot.nurse_out]) finalStatsData[slot.nurse_out].push({ ...patientInfo, type: 'noon_out'});
-                }
-            });
-
-            generateEarlyShiftTable(earlyTable, '早', fullData.schedule, names || {});
-            generateLateShiftTable(lateTable, '晚', fullData.schedule, names || {});
+            generateTable(earlyTable, '早', schedule, names || {});
+            generateTable(lateTable, '晚', schedule, names || {});
         }
         
         const formatPatientListWithColor = (arr) => {
              return arr.map(p => {
                 const patientSpan = document.createElement('span');
                 patientSpan.textContent = p.displayText;
-                patientSpan.dataset.slotKey = p.slotKey; // Store the unique key
+                patientSpan.dataset.slotKey = p.slotKey;
                 patientSpan.draggable = true;
 
                 const u = p.displayText.toUpperCase();
@@ -288,18 +217,8 @@
         };
         
         function generateTable(tableElement, shiftPrefix, schedule, names) {
-            const headerRow = `
-                <tr class="team-header-row">
-                    <th class="row-header"></th>
-                    ${baseTeams.map(team => `<td>${shiftPrefix}${team}組</td>`).join('')}
-                </tr>`;
-            
-            const nameRow = `
-                <tr>
-                    <th class="row-header">姓名</th>
-                    ${baseTeams.map(team => `<td class="team-name-cell"><select class="name-select" data-team-id="${shiftPrefix}${team}">${nurseOptionsHTML}</select></td>`).join('')}
-                </tr>`;
-
+            const headerRow = `<tr class="team-header-row"><th class="row-header"></th>${baseTeams.map(team => `<td>${shiftPrefix}${team}組</td>`).join('')}</tr>`;
+            const nameRow = `<tr><th class="row-header">姓名</th>${baseTeams.map(team => `<td class="team-name-cell"><select class="name-select" data-team-id="${shiftPrefix}${team}">${nurseOptionsHTML}</select></td>`).join('')}</tr>`;
             const patientRows = {};
             if (shiftPrefix === '早') {
                 patientRows['早班'] = { html: '<th class="row-header">早班</th>', shiftIndex: '0', nurseField: 'nurse' };
@@ -309,7 +228,6 @@
             if (shiftPrefix === '晚') {
                 patientRows['晚班'] = { html: '<th class="row-header">晚班</th>', shiftIndex: '2', nurseField: 'nurse' };
             }
-
             baseTeams.forEach(team => {
                 const fullTeamName = `${shiftPrefix}${team}`;
                 Object.values(patientRows).forEach(rowInfo => {
@@ -322,8 +240,8 @@
                             let bedDisplay = slot.bedNumber || key.split('-')[0];
                              if (key.startsWith('peripheral')) bedDisplay = `外(${bedDisplay})`;
                             const tagDisplay = slot.tag ? ` (${slot.tag})` : '';
-                            // This part is simplified, real name would need a patient list lookup
-                            const patientName = `P-${slot.patientId.slice(-4)}`;
+                            const patient = allPatients.find(p => p.id === slot.patientId);
+                            const patientName = patient ? patient.name : `P-ID:${slot.patientId}`;
                             return { slotKey: key, displayText: `${bedDisplay} - ${patientName}${tagDisplay}` };
                         });
                     rowInfo.html += `<td class="patient-list-cell" data-team-id="${fullTeamName}" data-nurse-field="${rowInfo.nurseField}">${formatPatientListWithColor(patientsInGroup)}</td>`;
@@ -334,40 +252,37 @@
             tableElement.querySelectorAll('.name-select').forEach(s => { if (names[s.dataset.teamId]) s.value = names[s.dataset.teamId]; });
             addDragAndDropListeners(tableElement);
         }
-
+        
         function generateEarlyShiftTable(table, prefix, schedule, names) { generateTable(table, prefix, schedule, names); }
         function generateLateShiftTable(table, prefix, schedule, names) { generateTable(table, prefix, schedule, names); }
         
         function addDragAndDropListeners(tableElement) {
             let draggedItem = null;
-
             tableElement.addEventListener('dragstart', (e) => {
                 if (e.target.tagName === 'SPAN') {
                     draggedItem = e.target;
                     setTimeout(() => e.target.style.opacity = '0.5', 0);
                 }
             });
-
             tableElement.addEventListener('dragend', (e) => {
                 if (draggedItem) {
                     draggedItem.style.opacity = '1';
                     draggedItem = null;
                 }
             });
-
             tableElement.addEventListener('dragover', (e) => {
-                if (e.target.classList.contains('patient-list-cell')) {
+                const dropZone = e.target.closest('.patient-list-cell');
+                if (dropZone) {
                     e.preventDefault();
-                    e.target.classList.add('drag-over');
+                    dropZone.classList.add('drag-over');
                 }
             });
-
             tableElement.addEventListener('dragleave', (e) => {
-                if (e.target.classList.contains('patient-list-cell')) {
-                    e.target.classList.remove('drag-over');
+                const dropZone = e.target.closest('.patient-list-cell');
+                if (dropZone) {
+                    dropZone.classList.remove('drag-over');
                 }
             });
-
             tableElement.addEventListener('drop', (e) => {
                 e.preventDefault();
                 const dropZone = e.target.closest('.patient-list-cell');
@@ -376,17 +291,15 @@
                     const slotKey = draggedItem.dataset.slotKey;
                     const newTeamId = dropZone.dataset.teamId;
                     const nurseField = dropZone.dataset.nurseField;
-                    
                     if (currentRecord.schedule[slotKey]) {
-                        // Update the nurse field in the local data model
+                        // For noon shift, ensure we don't accidentally assign a late-shift group to an in-nurse slot etc.
+                        if (nurseField === 'nurse_in' && !newTeamId.startsWith('早')) {
+                             alert('午班上針只能分配給早班組別。'); return;
+                        }
                         currentRecord.schedule[slotKey][nurseField] = newTeamId;
-                        
-                        // Mark changes and show save button
                         hasGroupChanges = true;
                         saveGroupsBtn.style.display = 'inline-block';
                         setStatus('組別已變更，尚未儲存');
-
-                        // Re-render the tables to reflect the change
                         loadReportData(currentRecord);
                     }
                 }
@@ -394,16 +307,35 @@
         }
         // --- CHANGE END ---
         
-        function updateAndLoad(newDate) { /* ... no change ... */ }
-        function changeDate(days) { /* ... no change ... */ }
-        function goToToday() { /* ... no change ... */ }
-        function initialize() { /* ... no change ... */ }
+        function updateAndLoad(newDate) {
+            currentDate = newDate;
+            const dateStr = formatDate(currentDate);
+            dateDisplay.textContent = `${dateStr} 統計報表`;
+            const newUrl = new URL(window.location);
+            newUrl.searchParams.set('date', dateStr);
+            window.history.pushState({}, '', newUrl);
+            loadStatsFromCloud(dateStr);
+        }
+        function changeDate(days) {
+            const newDate = new Date(currentDate);
+            newDate.setDate(newDate.getDate() + days);
+            updateAndLoad(newDate);
+        }
+        function goToToday() { updateAndLoad(new Date()); }
+        function initialize() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const dateFromUrl = urlParams.get('date');
+            const initialDate = dateFromUrl ? new Date(dateFromUrl + 'T00:00:00') : new Date();
+            if (isNaN(initialDate.getTime())) { updateAndLoad(new Date()); } else { updateAndLoad(initialDate); }
+        }
 
-        saveNamesBtn.addEventListener('click', () => { /* ... no change ... */ });
+        saveNamesBtn.addEventListener('click', () => {
+            const newNames = {};
+            document.querySelectorAll('.name-select').forEach(select => { if (select.value) { newNames[select.dataset.teamId] = select.value; } });
+            saveNamesToCloud(newNames);
+        });
         clearNamesBtn.addEventListener('click', clearNames);
-        // --- CHANGE START: Add listener for new button ---
         saveGroupsBtn.addEventListener('click', saveGroupsToCloud);
-        // --- CHANGE END ---
         document.getElementById('prev-date-btn').addEventListener('click', () => changeDate(-1));
         document.getElementById('next-date-btn').addEventListener('click', () => changeDate(1));
         document.getElementById('today-btn').addEventListener('click', goToToday);
