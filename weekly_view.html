@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V5.1 - 最終修正版)</title>
+    <title>門診週排班總表 (V5.2 - 全新工作流重構版)</title>
     <style>
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
@@ -48,6 +48,7 @@
         #inpatient-list li .name { font-size: 1em; font-weight: bold; }
         #inpatient-list li .mrn, #inpatient-list li .freq { font-size: 0.8em; color: #6c757d; }
         #inpatient-list li .remarks { font-size: 0.8em; color: #555; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
+        #inpatient-list .disease-tag-display { color: #c62828; font-weight: bold; margin-right: 4px; }
         .table-wrapper { max-height: calc(75vh + 20px); overflow: auto; }
         .weekly-schedule-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .weekly-schedule-table th, .weekly-schedule-table td { border: 1px solid var(--border-color); padding: 4px; text-align: center; vertical-align: middle; height: 65px; }
@@ -261,7 +262,7 @@
                 allPatients = [].concat(...results).filter(p => p.isDeleted !== true);
             } catch (error) {
                 console.error("Failed to fetch all patient data:", error);
-                allPatients = [];
+                allPatients = []; 
                 throw error;
             }
         }
@@ -426,7 +427,7 @@
                         <span class="mrn">(${p.medicalRecordNumber || '無病歷號'})</span>
                     </div>
                     <div class="remarks">
-                        <span class="disease-tag-display" style="color: #c62828; font-weight: bold;">${diseaseAbbr}</span>
+                        <span class="disease-tag-display">${diseaseAbbr}</span>
                         ${remarks}
                     </div>
                 `;
@@ -671,12 +672,11 @@
                         if (dataToSave && dataToSave.id) {
                             savePromises.push(fetch(`${API.daily_records}/${dataToSave.id}`, { method: 'DELETE' }));
                         }
-                        continue;
+                    } else {
+                        const method = dataToSave.id ? 'PUT' : 'POST';
+                        const url = dataToSave.id ? `${API.daily_records}/${dataToSave.id}` : API.daily_records;
+                        savePromises.push(fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToSave) }));
                     }
-
-                    const method = dataToSave.id ? 'PUT' : 'POST';
-                    const url = dataToSave.id ? `${API.daily_records}/${dataToSave.id}` : API.daily_records;
-                    savePromises.push(fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToSave) }));
                 }
                  
                 const responses = await Promise.all(savePromises);
