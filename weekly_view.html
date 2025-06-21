@@ -369,17 +369,14 @@
             ).join('');
         };
         
-        function isPatientScheduledOnDay(patientId, dayIndex) {
+        function isPatientScheduledOnDay(pId, dIdx) {
             const currentScheduleMap = new Map(weeklyScheduleData);
             Object.entries(pendingChanges.toAdd).forEach(([slotId, data]) => currentScheduleMap.set(slotId, data));
-            
             for (const schedule of currentScheduleMap.values()) {
                 if (pendingChanges.toDelete.has(schedule.slotId)) continue;
-                if (schedule.patientId === patientId) {
+                if (schedule.patientId === pId) {
                      const parts = schedule.slotId.split('-');
-                     if (parts.length === 3 && parseInt(parts[2], 10) === dayIndex) {
-                        return true;
-                     }
+                     if (parts.length === 3 && parseInt(parts[2], 10) === dIdx) return true;
                 }
             }
             return false;
@@ -406,7 +403,7 @@
                     e.target.classList.add('active');
                     dialogState.currentTab = e.target.dataset.type;
                     patientSearchInput.value = '';
-                    dialogState.selectedPatientId = null;
+                    dialogState.selectedPatientId = null; 
                     confirmBtn.disabled = true;
                     renderPatientListInDialog();
                 }
@@ -495,6 +492,7 @@
             daysToFill.forEach(d_idx => { 
                 const newSlotId = `${bed}-${shiftIndex}-${d_idx}`; 
                 pendingChanges.toAdd[newSlotId] = { slotId: newSlotId, patientId, weekStart }; 
+                pendingChanges.toDelete.delete(newSlotId);
             }); 
             addScheduleDialog.close(); 
             updateDisplay(); 
@@ -625,7 +623,7 @@
             currentWeekStartDate = newDate;
             loadAllData();
         };
-
+        
         document.getElementById('prev-week-btn').addEventListener('click', () => changeWeek(-7));
         document.getElementById('next-week-btn').addEventListener('click', () => changeWeek(7));
         document.getElementById('today-week-btn').addEventListener('click', () => { if (Object.keys(pendingChanges.toAdd).length > 0 || pendingChanges.toDelete.size > 0) { if(!confirm('您有未儲存的變更，確定要切換日期嗎？所有變更將會遺失。')) return; } currentWeekStartDate = getStartOfWeek(new Date()); loadAllData(); });
