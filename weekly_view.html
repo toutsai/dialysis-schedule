@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V4.7 - 最終修正完整版)</title>
+    <title>門診週排班總表 (V5.1 - 最終修正版)</title>
     <style>
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
@@ -218,7 +218,7 @@
         
         async function initialize() {
             renderWeeklyScheduleTableFrame();
-            updateDisplay(); // Show frame immediately
+            updateDisplay();
             await loadAllData();
             setupDialogListeners();
         }
@@ -261,7 +261,7 @@
                 allPatients = [].concat(...results).filter(p => p.isDeleted !== true);
             } catch (error) {
                 console.error("Failed to fetch all patient data:", error);
-                allPatients = []; 
+                allPatients = [];
                 throw error;
             }
         }
@@ -272,6 +272,7 @@
             statusText.textContent = '讀取中...';
             try {
                 await fetchAllActivePatients();
+                renderInpatientList();
                 
                 const weekDates = Array.from({length: 6}, (_, i) => {
                     const d = new Date(currentWeekStartDate);
@@ -291,7 +292,9 @@
                 });
                 
                 statusText.textContent = loadedCount > 0 ? `已從雲端載入 ${loadedCount} 天的資料` : '本週無常規排班資料';
-                updateDisplay();
+                populateScheduleData();
+                updateStatsToolbar();
+                updateStatusIndicator();
             } catch (error) { 
                 console.error("Failed to fetch data:", error); 
                 statusText.textContent = '讀取失敗';
@@ -663,23 +666,17 @@
                 const savePromises = [];
                 for (const dateStr of dirtyDates) {
                     const dataToSave = weeklyScheduleData[dateStr];
-                    if (!dataToSave) { 
-                        // This case can happen if a record was created and then cleared before saving.
-                        // We check if an ID exists to decide if we need to delete a phantom record.
-                        const potentialPhantom = Object.values(weeklyScheduleData).find(r => r.date === dateStr);
-                        if(potentialPhantom && potentialPhantom.id) {
-                            savePromises.push(fetch(`${API.daily_records}/${potentialPhantom.id}`, { method: 'DELETE' }));
+                    
+                    if (!dataToSave || Object.keys(dataToSave.schedule || {}).length === 0) {
+                        if (dataToSave && dataToSave.id) {
+                            savePromises.push(fetch(`${API.daily_records}/${dataToSave.id}`, { method: 'DELETE' }));
                         }
                         continue;
-                    };
-                    
-                    if (Object.keys(dataToSave.schedule).length === 0 && dataToSave.id) {
-                        savePromises.push(fetch(`${API.daily_records}/${dataToSave.id}`, { method: 'DELETE' }));
-                    } else if (Object.keys(dataToSave.schedule || {}).length > 0) {
-                        const method = dataToSave.id ? 'PUT' : 'POST';
-                        const url = dataToSave.id ? `${API.daily_records}/${dataToSave.id}` : API.daily_records;
-                        savePromises.push(fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToSave) }));
                     }
+
+                    const method = dataToSave.id ? 'PUT' : 'POST';
+                    const url = dataToSave.id ? `${API.daily_records}/${dataToSave.id}` : API.daily_records;
+                    savePromises.push(fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToSave) }));
                 }
                  
                 const responses = await Promise.all(savePromises);
