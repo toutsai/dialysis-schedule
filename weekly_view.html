@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V4.6 - 強制同步與渲染修正版)</title>
+    <title>門診週排班總表 (V5.0 - 全新工作流重構版)</title>
     <style>
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
@@ -42,12 +42,12 @@
         .filter-group button { padding: 4px 8px; font-size: 0.8em; flex-grow: 1; }
         .filter-group button.active { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
         #inpatient-list { list-style-type: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
-        #inpatient-list li { background-color: #fff; border: 1px solid #e0e0e0; padding: 8px 12px; margin-bottom: 8px; border-radius: 5px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; transition: background-color 0.3s; }
+        #inpatient-list li { background-color: #fff; border: 1px solid #e0e0e0; padding: 6px 10px; margin-bottom: 8px; border-radius: 5px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; transition: background-color: 0.3s; }
         #inpatient-list li.scheduled-inpatient { background-color: var(--highlight-yellow); border-left: 5px solid var(--primary-color); }
         .patient-info-row { display: flex; justify-content: space-between; width: 100%; align-items: center; }
-        #inpatient-list li .name { font-weight: bold; font-size: 1.1em; }
-        #inpatient-list li .mrn { font-size: 0.85em; color: #6c757d; }
-        #inpatient-list li .freq { font-size: 0.9em; color: #555; background-color: #e9ecef; padding: 2px 6px; border-radius: 10px; }
+        #inpatient-list li .name { font-size: 1em; font-weight: bold; }
+        #inpatient-list li .mrn, #inpatient-list li .freq { font-size: 0.8em; color: #6c757d; }
+        #inpatient-list li .remarks { font-size: 0.8em; color: #555; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
         .table-wrapper { max-height: calc(75vh + 20px); overflow: auto; }
         .weekly-schedule-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .weekly-schedule-table th, .weekly-schedule-table td { border: 1px solid var(--border-color); padding: 4px; text-align: center; vertical-align: middle; height: 65px; }
@@ -254,8 +254,8 @@
                 allPatients = [].concat(...results).filter(p => p.isDeleted !== true);
             } catch (error) {
                 console.error("Failed to fetch all patient data:", error);
-                allPatients = []; // Reset on failure
-                throw error; // Re-throw to be caught by the calling function
+                allPatients = [];
+                throw error;
             }
         }
 
@@ -265,7 +265,8 @@
             statusText.textContent = '讀取中...';
             try {
                 await fetchAllActivePatients();
-                
+                renderInpatientList();
+
                 const weekDates = Array.from({length: 6}, (_, i) => {
                     const d = new Date(currentWeekStartDate);
                     d.setDate(d.getDate() + i);
@@ -284,12 +285,15 @@
                 });
                 
                 statusText.textContent = loadedCount > 0 ? `已從雲端載入 ${loadedCount} 天的資料` : '本週無常規排班資料';
-                updateDisplay();
+                populateScheduleData();
+                updateStatsToolbar();
+                updateStatusIndicator();
+
             } catch (error) { 
                 console.error("Failed to fetch data:", error); 
                 statusText.textContent = '讀取失敗';
-                alert(`讀取資料失敗: ${error.message}\n將顯示空白表格。`); 
-                updateDisplay();
+                alert(`讀取雲端資料失敗: ${error.message}\n將顯示空白表格。`); 
+                updateDisplay(); // Fallback to a full blank update on error
             }
         }
         
@@ -404,7 +408,22 @@
             inpatients.forEach(p => {
                 const li = document.createElement('li');
                 if (isPatientScheduledThisWeek(p.id)) li.classList.add('scheduled-inpatient');
-                li.innerHTML = `<div class="patient-info-row"><span class="name">${p.name}</span><span class="freq">${p.frequency || '未設定'}</span></div><div class="patient-info-row"><span class="mrn">(${p.medicalRecordNumber || '無病歷號'})</span></div>`;
+                const remarks = p.remarks ? p.remarks.trim() : '無備註';
+                const diseaseAbbr = (p.diseases || []).map(d => DISEASE_ABBR_MAP[d] || '').join('');
+
+                li.innerHTML = `
+                    <div class="patient-info-row">
+                        <span class="name">${p.name}</span>
+                        <span class="freq">${p.frequency || '未設定'}</span>
+                    </div>
+                    <div class="patient-info-row">
+                        <span class="mrn">(${p.medicalRecordNumber || '無病歷號'})</span>
+                    </div>
+                    <div class="remarks">
+                        <span class="disease-tag-display" style="color: #c62828; font-weight: bold;">${diseaseAbbr}</span>
+                        ${remarks}
+                    </div>
+                `;
                 inpatientList.appendChild(li);
             });
         }
@@ -641,11 +660,12 @@
                 const savePromises = [];
                 for (const dateStr of dirtyDates) {
                     const dataToSave = weeklyScheduleData[dateStr];
-                    if (!dataToSave) continue;
                     
-                    if (Object.keys(dataToSave.schedule).length === 0 && dataToSave.id) {
-                        savePromises.push(fetch(`${API.daily_records}/${dataToSave.id}`, { method: 'DELETE' }));
-                    } else if (Object.keys(dataToSave.schedule || {}).length > 0) {
+                    if (!dataToSave || Object.keys(dataToSave.schedule || {}).length === 0) {
+                        if (dataToSave && dataToSave.id) {
+                            savePromises.push(fetch(`${API.daily_records}/${dataToSave.id}`, { method: 'DELETE' }));
+                        }
+                    } else {
                         const method = dataToSave.id ? 'PUT' : 'POST';
                         const url = dataToSave.id ? `${API.daily_records}/${dataToSave.id}` : API.daily_records;
                         savePromises.push(fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToSave) }));
