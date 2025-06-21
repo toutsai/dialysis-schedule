@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V4.3 - 最終修正完整版)</title>
+    <title>門診週排班總表 (V4.4 - 最終修正完整版)</title>
     <style>
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
@@ -243,7 +243,7 @@
             dirtyDates.clear();
             statusText.textContent = '讀取中...';
             try {
-                const [patientsRes] = await Promise.all([ fetch(API.patients) ]);
+                const patientsRes = await fetch(API.patients);
                 if (!patientsRes.ok) throw new Error('無法獲取病人資料');
                 allPatients = (await patientsRes.json()).filter(p => !p.isDeleted);
                 
@@ -422,7 +422,6 @@
                 if (action === 'single') handleDeleteSingle();
                 else if (action === 'subsequent') handleDeleteSubsequent();
                 else if (action === 'all') handleDeleteAllForPatient();
-
                 if (e.target.value === 'cancel' || action) {
                     deleteScheduleDialog.close();
                 }
@@ -623,7 +622,7 @@
                     
                     if (Object.keys(dataToSave.schedule).length === 0 && dataToSave.id) {
                         savePromises.push(fetch(`${API.daily_records}/${dataToSave.id}`, { method: 'DELETE' }));
-                    } else if (Object.keys(dataToSave.schedule).length > 0) {
+                    } else if (Object.keys(dataToSave.schedule || {}).length > 0) {
                         const method = dataToSave.id ? 'PUT' : 'POST';
                         const url = dataToSave.id ? `${API.daily_records}/${dataToSave.id}` : API.daily_records;
                         savePromises.push(fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToSave) }));
