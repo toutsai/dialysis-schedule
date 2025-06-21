@@ -2,9 +2,8 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>護理師組別統計報表 (V24.3 - 拖曳儲存修正版)</title>
+    <title>護理師組別統計報表 (V24.3 - 最終修正完整版)</title>
     <style>
-        /* CSS is unchanged */
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; padding: 20px; background-color: #f9f9f9; }
         .top-bar { display: flex; justify-content: space-between; align-items: center; max-width: 100%; margin: 0 auto 20px; }
         h1 { text-align: center; color: #333; flex-grow: 1; }
@@ -99,7 +98,12 @@
         const setStatus = (message) => { statusIndicator.textContent = message; };
 
         async function fetchAllActivePatients() {
-            const patientEndpoints = [ API.patients_ipd, API.patients_opd_1, API.patients_opd_2, API.patients_opd_3 ];
+            const patientEndpoints = [
+                API.patients_ipd,
+                API.patients_opd_1,
+                API.patients_opd_2,
+                API.patients_opd_3,
+            ];
             try {
                 const fetchPromises = patientEndpoints.map(url => fetch(url).then(res => res.ok ? res.json() : []));
                 const results = await Promise.all(fetchPromises);
@@ -119,12 +123,12 @@
             setStatus('讀取中...');
             
             try {
-                const [_, response] = await Promise.all([
-                    fetchAllActivePatients(),
-                    fetch(`${API.daily_records}?date=${dateStr}`)
-                ]);
+                await fetchAllActivePatients();
+                const response = await fetch(`${API.daily_records}?date=${dateStr}`);
+
                 if (!response.ok) throw new Error('Network error');
                 const data = await response.json();
+                
                 if (data.length > 0) {
                     currentRecord = data[0];
                     loadReportData(currentRecord);
@@ -245,7 +249,6 @@
             addDragAndDropListeners(tableElement);
         }
         
-        // --- CHANGE START: Corrected drag and drop logic ---
         function addDragAndDropListeners(tableElement) {
             let draggedItem = null;
             tableElement.addEventListener('dragstart', (e) => {
@@ -254,14 +257,12 @@
                     setTimeout(() => e.target.style.opacity = '0.5', 0);
                 }
             });
-
             tableElement.addEventListener('dragend', (e) => {
                 if (draggedItem) {
                     draggedItem.style.opacity = '1';
                     draggedItem = null;
                 }
             });
-
             tableElement.addEventListener('dragover', (e) => {
                 const dropZone = e.target.closest('.patient-list-cell');
                 if (dropZone) {
@@ -269,39 +270,32 @@
                     dropZone.classList.add('drag-over');
                 }
             });
-
             tableElement.addEventListener('dragleave', (e) => {
                 const dropZone = e.target.closest('.patient-list-cell');
                 if (dropZone) {
                     dropZone.classList.remove('drag-over');
                 }
             });
-
             tableElement.addEventListener('drop', (e) => {
                 e.preventDefault();
                 const dropZone = e.target.closest('.patient-list-cell');
                 if (dropZone && draggedItem) {
                     dropZone.classList.remove('drag-over');
-                    
                     const slotKey = draggedItem.dataset.slotKey;
                     const oldNurseField = draggedItem.dataset.nurseField;
                     const newTeamId = dropZone.dataset.teamId;
                     const newNurseField = dropZone.dataset.nurseField;
                     
                     if (currentRecord.schedule[slotKey]) {
-                        // Crucial check: only allow dropping within the same type of row.
                         if (oldNurseField !== newNurseField) {
                              alert('只能在相同類型的班別（如早班、午班上針、午班收針）內更換組別。');
                              return;
                         }
-                        
-                        // Update the local data model
+                        if (newNurseField === 'nurse_in' && !newTeamId.startsWith('早')) {
+                             alert('午班上針只能分配給早班組別。'); return;
+                        }
                         currentRecord.schedule[slotKey][newNurseField] = newTeamId;
-                        
-                        // Move the element in the DOM for immediate feedback
                         dropZone.appendChild(draggedItem);
-                        
-                        // Mark changes and show save button
                         hasGroupChanges = true;
                         saveGroupsBtn.style.display = 'inline-block';
                         setStatus('組別已變更，尚未儲存');
@@ -309,7 +303,6 @@
                 }
             });
         }
-        // --- CHANGE END ---
         
         function updateAndLoad(newDate) {
             currentDate = newDate;
