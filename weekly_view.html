@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V6.1 - 終極穩定重構版)</title>
+    <title>門診週排班總表 (V6.2 - 終極穩定版)</title>
     <style>
+        /* CSS is unchanged */
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
             --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
@@ -223,7 +224,7 @@
             await ensureAndLoadData();
             setupDialogListeners();
         }
-
+        
         function updateDisplayStatic() {
             updateWeekDisplay();
             updateTableHeaderDates();
@@ -253,9 +254,7 @@
         }
         
         async function fetchAllActivePatients() {
-            const patientEndpoints = [
-                API.patients_ipd, API.patients_opd_1, API.patients_opd_2, API.patients_opd_3
-            ];
+            const patientEndpoints = [ API.patients_ipd, API.patients_opd_1, API.patients_opd_2, API.patients_opd_3 ];
             try {
                 const fetchPromises = patientEndpoints.map(url => fetch(url).then(res => res.ok ? res.json() : []));
                 const results = await Promise.all(fetchPromises);
@@ -274,7 +273,7 @@
             for (let i = -7; i < 14; i++) {
                 const checkDate = new Date(today);
                 checkDate.setDate(checkDate.getDate() + i);
-                if (checkDate.getDay() !== 0) { // Skip Sundays
+                if (checkDate.getDay() !== 0) {
                     datesToCheck.push(formatDate(checkDate));
                 }
             }
@@ -317,7 +316,6 @@
             await loadAllData();
         }
 
-
         async function loadAllData() {
             weeklyScheduleData = {};
             dirtyDates.clear();
@@ -355,10 +353,14 @@
         const renderWeeklyScheduleTableFrame = () => {
             const head = document.getElementById('weekly-schedule-head');
             const body = document.getElementById('weekly-schedule-body');
+            head.innerHTML = '';
+            body.innerHTML = '';
+
             let headerHtml = '<tr><th>床位</th><th>班次</th>';
             WEEKDAYS.forEach((day) => { headerHtml += `<th><div class="weekday">${day}</div><div class="date"></div></th>`; });
             headerHtml += '</tr>';
             head.innerHTML = headerHtml;
+
             let bodyHtml = '';
             bedLayout.forEach(bedNumber => {
                 const isHepatitis = hepatitisBeds.includes(bedNumber);
@@ -390,7 +392,7 @@
 
                 slot.innerHTML = '';
                 slot.className = 'schedule-slot';
-                if (schedule) {
+                if (schedule && schedule.patientId) {
                     const patient = allPatients.find(p => p.id === schedule.patientId);
                     if (patient) {
                         slot.classList.add('filled', `status-${patient.status || 'opd'}`);
@@ -465,6 +467,7 @@
                 if (isPatientScheduledThisWeek(p.id)) li.classList.add('scheduled-inpatient');
                 const remarks = p.remarks ? p.remarks.trim() : '無備註';
                 const diseaseAbbr = (p.diseases || []).map(d => DISEASE_ABBR_MAP[d] || '').join('');
+
                 li.innerHTML = `
                     <div class="patient-info-row">
                         <span class="name">${p.name}</span>
@@ -642,14 +645,14 @@
             const [bed, shiftIndex, startDayIndexStr] = deleteSlotId.split('-');
             const startDayIndex = parseInt(startDayIndexStr, 10);
             for (let dayIndex = startDayIndex; dayIndex < WEEKDAYS.length; dayIndex++) {
-                const currentSlotId = `${bed}-${shiftIndex}-${dayIndex}`;
                 const currentDate = new Date(currentWeekStartDate);
                 currentDate.setDate(currentDate.getDate() + dayIndex);
                 const dateStr = formatDate(currentDate);
                 const slotKey = `${bed}-${shiftIndex}`;
                 const schedule = weeklyScheduleData[dateStr]?.schedule?.[slotKey];
                 if (schedule && schedule.patientId === deletePatientId) {
-                     clearScheduleSlot(currentSlotId);
+                    const currentSlotId = `${bed}-${shiftIndex}-${dayIndex}`;
+                    clearScheduleSlot(currentSlotId);
                 }
             }
             updateDisplayDynamic();
@@ -711,20 +714,14 @@
                 const savePromises = [];
                 for (const dateStr of dirtyDates) {
                     const dataToSave = weeklyScheduleData[dateStr];
-                    if (!dataToSave) { 
-                        const potentialPhantom = Object.values(weeklyScheduleData).find(r => r.date === dateStr);
-                        if(potentialPhantom && potentialPhantom.id) {
-                            savePromises.push(fetch(`${API.daily_records}/${potentialPhantom.id}`, { method: 'DELETE' }));
-                        }
-                        continue;
-                    };
+                    if (!dataToSave) continue;
                     
                     if (Object.keys(dataToSave.schedule || {}).length === 0 && dataToSave.id) {
                         savePromises.push(fetch(`${API.daily_records}/${dataToSave.id}`, { method: 'DELETE' }));
                     } else if (Object.keys(dataToSave.schedule || {}).length > 0) {
                         const method = dataToSave.id ? 'PUT' : 'POST';
                         const url = dataToSave.id ? `${API.daily_records}/${dataToSave.id}` : API.daily_records;
-                        savePromises.push(fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToSave) }));
+                        savePromises.push(fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToSave) }));
                     }
                 }
                  
@@ -757,31 +754,28 @@
 
             try {
                 const nextWeekDates = Array.from({length: 6}, (_, i) => { const d = new Date(nextWeekStartDate); d.setDate(d.getDate() + i); return formatDate(d); });
-                
-                // Ensure records exist for the next week before trying to update them
-                const existingNextWeekRes = await Promise.all(nextWeekDates.map(date => fetch(`${API.daily_records}?date=${date}`)));
-                const existingNextWeekRecs = (await Promise.all(existingNextWeekRes.map(res => res.json()))).flat();
-                const existingNextWeekRecsMap = new Map(existingNextWeekRecs.map(rec => [rec.date, rec]));
+                const existingSchedulesRes = await Promise.all(nextWeekDates.map(date => fetch(`${API.daily_records}?date=${date}`)));
+                const existingSchedules = (await Promise.all(existingSchedulesRes.map(res => res.json()))).flat();
 
+                if (existingSchedules.length > 0) {
+                    if (!confirm('下一週已有排班資料，確定要覆蓋嗎？')) throw new Error('操作已取消');
+                    await Promise.all(existingSchedules.map(sch => fetch(`${API.daily_records}/${sch.id}`, { method: 'DELETE' })));
+                }
+                
                 const schedulesToCopy = Object.values(weeklyScheduleData);
                 if (schedulesToCopy.length === 0) {
                     alert('本週無排班資料可複製。'); throw new Error('本週無資料');
                 }
 
                 const copyPromises = schedulesToCopy.map(dayRecord => {
+                    if(!dayRecord.date) return null;
                     const oldDate = new Date(dayRecord.date + "T00:00:00");
                     const newDate = new Date(oldDate);
                     newDate.setDate(oldDate.getDate() + 7);
-                    const newDateStr = formatDate(newDate);
                     
-                    const newRecord = { date: newDateStr, schedule: dayRecord.schedule, names: dayRecord.names || {} };
-                    
-                    const existingRecord = existingNextWeekRecsMap.get(newDateStr);
-                    const method = existingRecord ? 'PUT' : 'POST';
-                    const url = existingRecord ? `${API.daily_records}/${existingRecord.id}` : API.daily_records;
-
-                    return fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newRecord) });
-                });
+                    const newRecord = { date: formatDate(newDate), schedule: dayRecord.schedule, names: dayRecord.names || {} };
+                    return fetch(API.daily_records, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newRecord) });
+                }).filter(p => p !== null);
                 await Promise.all(copyPromises);
 
                 alert('複製成功！現在將跳轉到下一週。');
