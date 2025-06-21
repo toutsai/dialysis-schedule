@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>護理師組別統計報表 (V24.3 - 最終修正完整版)</title>
+    <title>護理師組別統計報表 (V24.4 - 儲存邏輯與拖曳修正版)</title>
     <style>
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; padding: 20px; background-color: #f9f9f9; }
         .top-bar { display: flex; justify-content: space-between; align-items: center; max-width: 100%; margin: 0 auto 20px; }
@@ -98,12 +98,7 @@
         const setStatus = (message) => { statusIndicator.textContent = message; };
 
         async function fetchAllActivePatients() {
-            const patientEndpoints = [
-                API.patients_ipd,
-                API.patients_opd_1,
-                API.patients_opd_2,
-                API.patients_opd_3,
-            ];
+            const patientEndpoints = [ API.patients_ipd, API.patients_opd_1, API.patients_opd_2, API.patients_opd_3 ];
             try {
                 const fetchPromises = patientEndpoints.map(url => fetch(url).then(res => res.ok ? res.json() : []));
                 const results = await Promise.all(fetchPromises);
@@ -125,10 +120,8 @@
             try {
                 await fetchAllActivePatients();
                 const response = await fetch(`${API.daily_records}?date=${dateStr}`);
-
                 if (!response.ok) throw new Error('Network error');
                 const data = await response.json();
-                
                 if (data.length > 0) {
                     currentRecord = data[0];
                     loadReportData(currentRecord);
@@ -144,7 +137,7 @@
         }
 
         async function saveNamesToCloud(namesObject) {
-            if (!currentRecord) { alert("目前日期沒有排程資料，無法儲存。"); return; }
+            if (!currentRecord || !currentRecord.id) { alert("目前日期沒有可儲存的記錄。"); return; }
             const dataToPatch = { names: namesObject };
             setStatus('儲存中...');
             try {
@@ -161,12 +154,13 @@
         }
         
         async function saveGroupsToCloud() {
-            if (!currentRecord || !hasGroupChanges) { alert('沒有組別變更需要儲存。'); return; }
+            if (!currentRecord || !currentRecord.id) { alert('沒有可儲存的記錄。'); return; }
+            if (!hasGroupChanges) { alert('沒有組別變更需要儲存。'); return; }
             const dataToPatch = { schedule: currentRecord.schedule };
             setStatus('儲存組別變更中...');
             try {
                 const response = await fetch(`${API.daily_records}/${currentRecord.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToPatch) });
-                 if (!response.ok) throw new Error('Save error');
+                if (!response.ok) throw new Error('Save error');
                 hasGroupChanges = false;
                 saveGroupsBtn.style.display = 'none';
                 setStatus(`組別資料已於 ${new Date().toLocaleTimeString()} 儲存成功`);
@@ -257,12 +251,14 @@
                     setTimeout(() => e.target.style.opacity = '0.5', 0);
                 }
             });
+
             tableElement.addEventListener('dragend', (e) => {
                 if (draggedItem) {
                     draggedItem.style.opacity = '1';
                     draggedItem = null;
                 }
             });
+
             tableElement.addEventListener('dragover', (e) => {
                 const dropZone = e.target.closest('.patient-list-cell');
                 if (dropZone) {
@@ -270,12 +266,14 @@
                     dropZone.classList.add('drag-over');
                 }
             });
+
             tableElement.addEventListener('dragleave', (e) => {
                 const dropZone = e.target.closest('.patient-list-cell');
                 if (dropZone) {
                     dropZone.classList.remove('drag-over');
                 }
             });
+
             tableElement.addEventListener('drop', (e) => {
                 e.preventDefault();
                 const dropZone = e.target.closest('.patient-list-cell');
@@ -286,16 +284,26 @@
                     const newTeamId = dropZone.dataset.teamId;
                     const newNurseField = dropZone.dataset.nurseField;
                     
-                    if (currentRecord.schedule[slotKey]) {
+                    if (currentRecord && currentRecord.schedule && currentRecord.schedule[slotKey]) {
                         if (oldNurseField !== newNurseField) {
                              alert('只能在相同類型的班別（如早班、午班上針、午班收針）內更換組別。');
                              return;
                         }
                         if (newNurseField === 'nurse_in' && !newTeamId.startsWith('早')) {
-                             alert('午班上針只能分配給早班組別。'); return;
+                             alert('午班上針只能分配給早班組別。'); 
+                             return;
                         }
+                        
+                        // Update the local data model
                         currentRecord.schedule[slotKey][newNurseField] = newTeamId;
+                        
+                        // Move the element in the DOM for immediate feedback
                         dropZone.appendChild(draggedItem);
+                        
+                        // Update the dataset of the moved item
+                        draggedItem.dataset.nurseField = newNurseField;
+                        
+                        // Mark changes and show save button
                         hasGroupChanges = true;
                         saveGroupsBtn.style.display = 'inline-block';
                         setStatus('組別已變更，尚未儲存');
