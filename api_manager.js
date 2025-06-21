@@ -1,5 +1,4 @@
 // --- API Endpoint Configuration ---
-// 請在此處手動替換為您建立的6個 MockAPI URL
 const API_ENDPOINTS = {
     patients: [
         'https://6852ef850594059b23cfaa4f.mockapi.io/patients',
@@ -13,7 +12,6 @@ const API_ENDPOINTS = {
         'https://6852ef850594059b23cfaa4f.mockapi.io/patients9',
         'https://6852ef850594059b23cfaa4f.mockapi.io/patients10'
     ],
-    // achedules 和 weekly_schedule 可以暂时留空，或使用单一端点
     schedules: ['https://6852ef850594059b23cfaa4f.mockapi.io/schedules'],
     weekly_schedule: ['https://6852ef850594059b23cfaa4f.mockapi.io/weekly_schedule']
 };
@@ -24,10 +22,24 @@ const ApiManager = (resourceType) => {
         throw new Error(`未知的資源類型: ${resourceType}`);
     }
 
+    // --- CHANGE START: More robust fetchAll logic ---
     const fetchAll = async (query = '') => {
         const requests = endpoints.map(url => 
-            fetch(`${url}${query}`).then(res => res.ok ? res.json() : [])
+            fetch(`${url}${query}`)
+                .then(response => {
+                    // If response is successful (200-299), parse it as JSON.
+                    // If it's a 404, it's not a critical error, just means no data, so we treat it as an empty array.
+                    if (response.ok) {
+                        return response.json();
+                    }
+                    if (response.status === 404) {
+                        return []; // Gracefully handle "Not Found" as an empty result.
+                    }
+                    // For other errors (like 500, 429), throw an error to be caught by the outer catch block.
+                    throw new Error(`伺服器錯誤: ${response.status}`);
+                })
         );
+
         const results = await Promise.allSettled(requests);
         let allData = [];
         results.forEach((result, index) => {
@@ -37,14 +49,18 @@ const ApiManager = (resourceType) => {
                     _sourceEndpoint: endpoints[index] 
                 }));
                 allData = allData.concat(dataWithSource);
+            } else if (result.status === 'rejected') {
+                // Log errors from individual endpoints but don't stop the entire process
+                console.error(`讀取端點 ${endpoints[index]} 失敗:`, result.reason);
             }
         });
         return allData;
     };
+    // --- CHANGE END ---
 
     const save = async (data) => {
         const counts = await Promise.all(
-            endpoints.map(url => fetch(url).then(res => res.json()).then(d => d.length).catch(() => 100))
+            endpoints.map(url => fetch(url).then(res => res.ok ? res.json() : []).then(d => d.length).catch(() => 100))
         );
 
         let targetEndpoint = null;
