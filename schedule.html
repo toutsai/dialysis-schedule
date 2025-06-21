@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>洗腎室床位病人排程表 (V34.0 - 整合環形儲存)</title>
+    <title>洗腎室床位病人排程表 (V33.4 - 穩定版)</title>
     <style>
         body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .controls-panel { max-width: 1800px; margin: 0 auto 20px; padding: 15px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
@@ -95,7 +95,7 @@
         
         @page { size: A4 landscape; margin: 0.5cm; }
         @media print { 
-            /* Print styles are unchanged */
+            /* Print styles remain the same */
         }
     </style>
 </head>
@@ -140,7 +140,7 @@
         </div>
         <aside class="inpatient-sidebar">
             <h3>住院病人清單</h3>
-            <div class="filter-group">
+            <div class="filter-group" id="filter-group">
                 <button data-filter="all" class="active">全部</button>
                 <button data-filter="135">一三五</button>
                 <button data-filter="246">二四六</button>
@@ -149,7 +149,7 @@
             <ul id="inpatient-list"></ul>
         </aside>
     </div>
-    <script src="api_manager.js"></script> 
+    <script src="api_manager.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         const schedulesApi = ApiManager('schedules');
@@ -328,10 +328,10 @@
             } else if (inpatientFilter === '246') { inpatients = inpatients.filter(p => p.frequency === '二四六');
             } else if (inpatientFilter === 'other') { inpatients = inpatients.filter(p => !regularFreqs.includes(p.frequency)); }
             
-            const inpatientList = document.getElementById('inpatient-list');
-            inpatientList.innerHTML = '';
+            const inpatientListEl = document.getElementById('inpatient-list');
+            inpatientListEl.innerHTML = '';
             if (inpatients.length === 0) {
-                inpatientList.innerHTML = '<li>無符合條件的住院病人</li>';
+                inpatientListEl.innerHTML = '<li>無符合條件的住院病人</li>';
             } else {
                 inpatients.forEach(p => {
                     const li = document.createElement('li');
@@ -345,7 +345,7 @@
                             <span class="mrn">(${p.medicalRecordNumber || '無病歷號'})</span>
                         </div>
                     `;
-                    inpatientList.appendChild(li);
+                    inpatientListEl.appendChild(li);
                 });
             }
         }
@@ -458,6 +458,7 @@
             setStatus('同步至週排班中...', 'loading');
             try {
                 await syncToWeeklySchedule(dailyScheduleData);
+                document.querySelectorAll('.newly-synced').forEach(el => el.classList.remove('newly-synced'));
                 setStatus('資料已儲存並同步至週排班', 'saved');
                 alert('本日排程儲存成功，並已同步更新至週排班總表！');
             } catch (error) {
@@ -565,8 +566,8 @@
             loadDataForDay(formatDate(currentDate));
         }
 
-        const updateDateDisplay_full = () => { const dateStr = formatDate(currentDate); document.getElementById('current-date-display').textContent = dateStr; document.getElementById('copy-source-date').value = dateStr; const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']; document.getElementById('weekday-display').textContent = weekdays[currentDate.getDay()]; };
-        const generateLayout_full = () => { const leftWing = document.getElementById('left-wing'); const rightWing = document.getElementById('right-wing'); const peripheralContainer = document.getElementById('peripheral-bed-container'); generateWingLayout(leftWing, layoutData.leftWingRows, 'left-wing-bed'); generateWingLayout(rightWing, layoutData.rightWingRows, 'right-wing-bed'); const n = document.createElement('div'); n.className = 'bed-row'; n.innerHTML = '<div class="nursing-station">護理站</div>'; leftWing.appendChild(n); peripheralContainer.innerHTML = ''; for (let i = 1; i <= peripheralBedCount; i++) { peripheralContainer.appendChild(createPeripheralBedElement(i)); }};
+        const updateDateDisplay = () => { const dateStr = formatDate(currentDate); document.getElementById('current-date-display').textContent = dateStr; document.getElementById('copy-source-date').value = dateStr; const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']; document.getElementById('weekday-display').textContent = weekdays[currentDate.getDay()]; };
+        const generateLayout = () => { const leftWing = document.getElementById('left-wing'); const rightWing = document.getElementById('right-wing'); const peripheralContainer = document.getElementById('peripheral-bed-container'); generateWingLayout(leftWing, layoutData.leftWingRows, 'left-wing-bed'); generateWingLayout(rightWing, layoutData.rightWingRows, 'right-wing-bed'); const n = document.createElement('div'); n.className = 'bed-row'; n.innerHTML = '<div class="nursing-station">護理站</div>'; leftWing.appendChild(n); peripheralContainer.innerHTML = ''; for (let i = 1; i <= peripheralBedCount; i++) { peripheralContainer.appendChild(createPeripheralBedElement(i)); }};
         
         // --- Event Listeners ---
         document.getElementById('prev-date-btn').addEventListener('click', () => changeDate(-1));
