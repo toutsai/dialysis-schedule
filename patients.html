@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>透析病人管理系統 (V4.0 - 環形儲存)</title>
+    <title>透析病人管理系統 (V4.1 - 排序修正)</title>
     <style>
         :root { --green-bg: #e8f5e9; --green-text: #2e7d32; --blue-bg: #e3f2fd;  --blue-text: #1565c0; --orange-bg: #fff3e0; --orange-text: #ef6c00; --grey-bg: #f5f5f5; --grey-text: #616161; --red-text: #c62828; }
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f9f9f9; margin: 0; padding: 20px; }
@@ -138,9 +138,18 @@
                 renderAllTables();
             } catch (error) {
                 console.error("Failed to fetch patients:", error);
-                alert(`讀取病人資料失敗！\n\n原因: ${error.message}\n\n請檢查網路連線，或稍後再試。`);
+                alert(`讀取病人資料失敗！\n\n原因: ${error.message}\n\n這通常是網路問題或短時間內請求過於頻繁(429)導致。請稍後再試。`);
             }
         }
+        
+        const sortPatients = (patients) => {
+            patients.sort((a, b) => {
+                const valA = a[currentSort.column] || '';
+                const valB = b[currentSort.column] || '';
+                const compare = String(valA).localeCompare(String(valB), 'zh-Hant');
+                return currentSort.order === 'asc' ? compare : -compare;
+            });
+        };
 
         function renderAllTables(deletedSearchTerm = '') {
             renderTable('ipd');
@@ -170,7 +179,7 @@
                 if (searchTerm) {
                     const term = searchTerm.toLowerCase();
                     patients = patients.filter(p => 
-                        p.name.toLowerCase().includes(term) || 
+                        (p.name && p.name.toLowerCase().includes(term)) || 
                         (p.medicalRecordNumber && p.medicalRecordNumber.toLowerCase().includes(term))
                     );
                 }
@@ -178,7 +187,8 @@
                 patients = allPatients.filter(p => p.status === type && !p.isDeleted);
             }
 
-            sortPatients(patients);
+            sortPatients(patients); 
+            
             tableBody.innerHTML = patients.map(p => {
                 const rowClass = getRowClass(p);
                 let rowContent = '';
@@ -228,7 +238,7 @@
                 physicianLabel.textContent = '會診醫師';
                 ipdFields.forEach(f => f.classList.remove('hidden'));
                 opdFields.forEach(f => f.classList.add('hidden'));
-            } else { // opd
+            } else { 
                 modalTitle.textContent = patient ? '編輯門診病人' : '新增門診病人';
                 physicianLabel.textContent = '收案醫師';
                 ipdFields.forEach(f => f.classList.add('hidden'));
@@ -288,8 +298,7 @@
             try {
                 if (id) {
                     const originalPatient = allPatients.find(p => p.id === id);
-                    patientData._sourceEndpoint = originalPatient._sourceEndpoint;
-                    await patientApi.update(id, patientData);
+                    await patientApi.update(id, {...originalPatient, ...patientData});
                 } else {
                     patientData.createdAt = new Date().toISOString();
                     await patientApi.save(patientData);
@@ -311,7 +320,7 @@
                 await fetchAllPatients();
             } catch (error) { console.error("Update failed:", error); alert("操作失敗！"); }
         };
-
+        
         const deletePatient = (id) => {
              const deleteDialog = document.getElementById('delete-reason-dialog');
              const optionsContainer = document.getElementById('delete-reason-options');
@@ -331,7 +340,6 @@
                     }
                 } 
                 deleteDialog.close(); 
-                optionsContainer.removeEventListener('click', handleReasonSelection);
              }; 
              optionsContainer.addEventListener('click', handleReasonSelection, { once: true }); 
              document.getElementById('delete-cancel-btn').addEventListener('click', () => deleteDialog.close(), { once: true }); 
@@ -351,10 +359,10 @@
                 p.originalStatus === 'ipd' ? '住院' : '門診',
                 p.deleteReason,
                 formatDate(p.deletedAt),
-                p.remarks?.replace(/,/g, '，') || ''
+                (p.remarks || '').replace(/,/g, '，') 
             ]);
 
-            let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // \uFEFF for BOM
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
             csvContent += headers.join(",") + "\r\n";
             rows.forEach(rowArray => {
                 let row = rowArray.join(",");
@@ -369,8 +377,13 @@
             link.click();
             document.body.removeChild(link);
         }
-
-        // --- Setup Event Listeners ---
+        
+        const closeModal = () => {modal.style.display = 'none';modalFormContent.innerHTML = '';};
+        const getRowClass = (p) => {if (p.isDeleted) return 'status-deleted';const biweeklyFreq = ['一四', '二五', '三六', '一五', '二六'];if (biweeklyFreq.includes(p.frequency)) return 'status-biweekly';if (p.status === 'ipd') return 'status-ipd';if (p.status === 'opd') return 'status-opd';return '';};
+        const generateDiseaseTags = (d) => {if (!d || d.length === 0) return '';return d.map(tag => `<span class="disease-tag">${tag}</span>`).join('');};
+        const updateStats = () => {const ipdPatients = allPatients.filter(p => p.status === 'ipd' && !p.isDeleted);const opdPatients = allPatients.filter(p => p.status === 'opd' && !p.isDeleted);const ipdStatsDiv = document.getElementById('ipd-stats');const opdStatsDiv = document.getElementById('opd-stats');const generateStatsHTML = (patients) => {if (patients.length === 0) return '總人數: 0';const freqCounts = patients.reduce((acc, p) => {acc[p.frequency] = (acc[p.frequency] || 0) + 1;return acc;}, {});const freqString = Object.entries(freqCounts).map(([freq, count]) => `${freq || '未分類'}: ${count}人`).join(', ');return `總人數: ${patients.length} (${freqString})`;};ipdStatsDiv.innerHTML = generateStatsHTML(ipdPatients);opdStatsDiv.innerHTML = generateStatsHTML(opdPatients);};
+        const handleSort = (key) => { if (currentSort.column === key) { currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc'; } else { currentSort.column = key; currentSort.order = 'asc'; } renderAllTables(); };
+        
         document.querySelector('.container').addEventListener('click', (e) => {
             const target = e.target;
             const action = target.dataset.action;
@@ -398,9 +411,7 @@
                 exportDeletedToCSV();
             }
         });
-        
-        // All other minor functions and listeners
-        const closeModal = () => { modal.style.display = 'none'; modalFormContent.innerHTML = ''; };
+
         const tabButtons = document.querySelectorAll('.tab-button');
         tabButtons.forEach(button => { button.addEventListener('click', (e) => { const targetTab = e.currentTarget.dataset.tab; tabButtons.forEach(btn => btn.classList.remove('active')); tabContents.forEach(content => content.classList.remove('active')); e.currentTarget.classList.add('active'); document.getElementById(targetTab).classList.add('active'); }); });
         document.querySelector('.close-button').addEventListener('click', closeModal);
