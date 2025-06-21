@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>透析病人管理系統 (V4.1 - 排序修正)</title>
+    <title>透析病人管理系統 (V4.2 - Tab修正)</title>
     <style>
         :root { --green-bg: #e8f5e9; --green-text: #2e7d32; --blue-bg: #e3f2fd;  --blue-text: #1565c0; --orange-bg: #fff3e0; --orange-text: #ef6c00; --grey-bg: #f5f5f5; --grey-text: #616161; --red-text: #c62828; }
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f9f9f9; margin: 0; padding: 20px; }
@@ -126,9 +126,14 @@
         let allPatients = [];
         let currentSort = { column: 'createdAt', order: 'desc' };
         
+        // --- CHANGE START: Define all DOM element constants here ---
+        const tabButtons = document.querySelectorAll('.tab-button');
+        const tabContents = document.querySelectorAll('.tab-content');
         const modal = document.getElementById('patient-modal');
         const modalTitle = document.getElementById('modal-title');
         const modalFormContent = document.getElementById('modal-form-content');
+        const deleteDialog = document.getElementById('delete-reason-dialog');
+        // --- CHANGE END ---
         
         const formatDate = (isoString) => isoString ? new Date(isoString).toLocaleDateString() : '';
 
@@ -141,7 +146,7 @@
                 alert(`讀取病人資料失敗！\n\n原因: ${error.message}\n\n這通常是網路問題或短時間內請求過於頻繁(429)導致。請稍後再試。`);
             }
         }
-        
+
         const sortPatients = (patients) => {
             patients.sort((a, b) => {
                 const valA = a[currentSort.column] || '';
@@ -187,7 +192,7 @@
                 patients = allPatients.filter(p => p.status === type && !p.isDeleted);
             }
 
-            sortPatients(patients); 
+            sortPatients(patients);
             
             tableBody.innerHTML = patients.map(p => {
                 const rowClass = getRowClass(p);
@@ -411,8 +416,7 @@
                 exportDeletedToCSV();
             }
         });
-
-        const tabButtons = document.querySelectorAll('.tab-button');
+        
         tabButtons.forEach(button => { button.addEventListener('click', (e) => { const targetTab = e.currentTarget.dataset.tab; tabButtons.forEach(btn => btn.classList.remove('active')); tabContents.forEach(content => content.classList.remove('active')); e.currentTarget.classList.add('active'); document.getElementById(targetTab).classList.add('active'); }); });
         document.querySelector('.close-button').addEventListener('click', closeModal);
         window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
