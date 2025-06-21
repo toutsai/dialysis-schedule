@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>洗腎室床位病人排程表 (V31.1 - 完整無省略修正版)</title>
+    <title>洗腎室床位病人排程表 (V31.2 - 備註整合版)</title>
     <style>
         body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .controls-panel { max-width: 1800px; margin: 0 auto 20px; padding: 15px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
@@ -68,6 +68,7 @@
         .peripheral-shift-row > *:last-child { border-right: none; }
         .patient-tag { border-left: 1px solid #e0e0e0; font-size: 0.8em; }
         .patient-tag:empty::before { content: "備註"; color: #aaa; font-style: italic; }
+        .disease-tag-display { color: #c62828; font-weight: bold; margin-right: 4px; }
         .nurse-team-select:has(option[value=""]:checked) { background-color: #dcdcdc !important; }
         .patient-name.tag-chou, .peripheral-patient-name.tag-chou { background-color: #90caf9 !important; }
         .patient-name.tag-new, .peripheral-patient-name.tag-new { background-color: #fff176 !important; }
@@ -93,7 +94,7 @@
         #inpatient-list li .mrn { font-size: 0.85em; color: #6c757d; }
         #inpatient-list li .freq { font-size: 0.9em; color: #555; background-color: #e9ecef; padding: 2px 6px; border-radius: 10px; }
         @page { size: A4 landscape; margin: 0.5cm; }
-        @media print { body { padding: 0; background-color: #fff; font-size: 8pt; -webkit-print-color-adjust: exact; color-adjust: exact; } .controls-panel, .aisle, .status-indicator, #print-btn, #save-btn, #clear-all-btn, #copy-schedule-btn, #copy-source-date, .search-group, #today-btn, .date-nav-btn, .inpatient-sidebar { display: none !important; } .main-container { display: block; } .date-navigator { display: flex; justify-content: space-between; align-items: center; width: 100%; margin: 0 0 5px 0; padding-bottom: 5px; border-bottom: 2px solid #000; } #current-date-display, #weekday-display { font-size: 1.5em; text-align: left; } #weekday-display { flex-grow: 1; } .shift-patient-count { display: flex !important; border-left: none; padding-left: 0; font-size: 1.1em; gap: 20px; flex-shrink: 0; } .dialysis-unit, .extra-sections { max-width: 100%; box-shadow: none; gap: 10px; } .dialysis-unit { grid-template-columns: 1fr 1fr; } .bed, .nursing-station, .peripheral-bed { border: 1px solid #000; box-shadow: none; page-break-inside: avoid; border-radius: 3px; } .bed-row, .peripheral-bed-container { gap: 5px; } .bed { min-height: 120px; } .shift-row, .peripheral-shift-row { font-size: 1em; min-height: 25px; align-items: center; } .shift-row { grid-template-columns: 20px 55px 1fr 30px; } .peripheral-shift-row { display: grid; grid-template-columns: 20px 55px 55px 1fr 30px; } .shift-label, .nurse-team-select, .patient-name, .peripheral-patient-name, .peripheral-bed-number, .patient-tag, .nurse-split-column { display: flex; align-items: center; justify-content: center; height: 100%; } .nurse-split-column { flex-direction: column; } .nurse-split-column .nurse-team-select { width: 100%; flex-grow: 1; } .patient-name:empty::before, .peripheral-bed-number:empty::before, .peripheral-patient-name:empty::before, .patient-tag:empty::before { content: ""; } .patient-name:empty, .peripheral-patient-name:empty { background-color: transparent !important; } select, .nurse-team-select:has(option[value=""]:checked) { -webkit-appearance: none; -moz-appearance: none; appearance: none; border: none; background: transparent !important; } .patient-name.tag-new, .peripheral-patient-name.tag-new, .patient-name.hospitalized, .peripheral-patient-name.hospitalized, .patient-name.tag-b, .peripheral-patient-name.tag-b, .patient-name.tag-chou, .peripheral-patient-name.tag-chou, .patient-name.tag-liang, .peripheral-patient-name.tag-liang, .patient-name.tag-huan, .peripheral-patient-name.tag-huan, .newly-synced .patient-name, .conflict-detected { background-color: inherit !important; border: 1px dotted #888; box-shadow: none !important; } .conflict-detected::after { display: none; } .bed.hepatitis .bed-header { border-bottom: 2px double #000; background-color: #fff !important; } }
+        @media print { /* ... */ }
     </style>
 </head>
 <body>
@@ -152,6 +153,7 @@
             daily_records: 'https://6852ef850594059b23cfaa4f.mockapi.io/daily_records',
             patients: 'https://6852ef850594059b23cfaa4f.mockapi.io/patients'
         };
+        const DISEASE_ABBR_MAP = { 'HIV': 'H', 'RPR': 'R', 'HBV': 'B', 'HCV': 'C', '隔離': '隔' };
         let currentDate = new Date();
         let currentRecord = null;
         let allPatients = [];
@@ -275,24 +277,35 @@
             document.getElementById('late-shift-count').textContent = lateCount;
         };
         
-        function updatePatientCellStyle(patientCell) {
-            if (!patientCell || !patientCell.textContent) { patientCell.className = patientCell.className.split(' ').filter(c => !c.startsWith('tag-') && c !== 'hospitalized' && c !== 'status-opd').join(' '); return; }
+        function updatePatientCellStyle(patientCell, tagText = '') {
+            if (!patientCell || !patientCell.textContent) {
+                patientCell.className = patientCell.className.split(' ').filter(c => !c.startsWith('tag-') && c !== 'hospitalized' && c !== 'status-opd').join(' ');
+                return;
+            }
             const patientName = patientCell.textContent.trim();
             const patient = allPatients.find(p => p.name === patientName);
             if (!patient) return;
-            const parentRow = patientCell.closest('.shift-row, .peripheral-shift-row');
-            const tagElement = parentRow.querySelector('.patient-tag');
-            const tagText = tagElement ? tagElement.textContent.toUpperCase() : '';
+
+            const tagTextUpper = tagText.toUpperCase();
+            
             patientCell.className = patientCell.className.split(' ').filter(c => !c.startsWith('tag-') && c !== 'hospitalized' && c !== 'status-opd').join(' ');
+            
             let styleApplied = false;
-            if (tagText.includes('抽')) { patientCell.classList.add('tag-chou'); styleApplied = true;
-            } else if (tagText.includes('新')) { patientCell.classList.add('tag-new'); styleApplied = true;
-            } else if (tagText.includes('換')) { patientCell.classList.add('tag-huan'); styleApplied = true;
-            } else if (tagText.includes('兩')) { patientCell.classList.add('tag-liang'); styleApplied = true;
-            } else if (tagText.includes('B')) { patientCell.classList.add('tag-b'); styleApplied = true; }
+            if (tagTextUpper.includes('抽')) { patientCell.classList.add('tag-chou'); styleApplied = true; } 
+            else if (tagTextUpper.includes('新')) { patientCell.classList.add('tag-new'); styleApplied = true; } 
+            else if (tagTextUpper.includes('換')) { patientCell.classList.add('tag-huan'); styleApplied = true; } 
+            else if (tagTextUpper.includes('兩')) { patientCell.classList.add('tag-liang'); styleApplied = true; } 
+            else if (tagTextUpper.includes('B') && !patient.diseases?.includes('HBV')) {
+                patientCell.classList.add('tag-b'); styleApplied = true; 
+            }
+            
             if (styleApplied) return;
-            if (tagText.includes('住') || patient.status === 'ipd') { patientCell.classList.add('hospitalized');
-            } else if (patient.status === 'opd') { patientCell.classList.add('status-opd'); }
+            
+            if (tagTextUpper.includes('住') || patient.status === 'ipd') {
+                patientCell.classList.add('hospitalized');
+            } else if (patient.status === 'opd') {
+                patientCell.classList.add('status-opd');
+            }
         }
         
         async function loadDailyRecord(dateStr) {
@@ -331,7 +344,7 @@
             for (const slotKey in scheduleData) {
                 const data = scheduleData[slotKey];
                 const patient = allPatients.find(p => p.id === data.patientId);
-                if (!patient) continue;
+                if (!patient) continue; 
 
                 let shiftId;
                 const parts = slotKey.split('-');
@@ -339,7 +352,7 @@
                 const shiftName = Object.keys(shiftToIndexMap).find(key => shiftToIndexMap[key] === parseInt(shiftIndex));
                 if (!shiftName) continue;
                 const baseId = parts.join('-');
-
+                
                 if (baseId.startsWith('peripheral')) {
                     shiftId = `${baseId}-${shiftName}`;
                 } else {
@@ -360,8 +373,24 @@
                 }
 
                 const tagCell = row.querySelector('.patient-tag');
-                if (tagCell && data.tag) { tagCell.textContent = data.tag; }
-                if (patientCell.textContent) { updatePatientCellStyle(patientCell); }
+                if (tagCell) {
+                    const diseaseAbbr = (patient.diseases || [])
+                        .map(d => DISEASE_ABBR_MAP[d] || '')
+                        .join('');
+                    
+                    const savedTag = data.tag || '';
+                    let userAddedPart = savedTag;
+
+                    if(diseaseAbbr.length > 0 && savedTag.startsWith(diseaseAbbr)) {
+                        userAddedPart = savedTag.substring(diseaseAbbr.length);
+                    }
+                    
+                    const diseaseSpan = `<span class="disease-tag-display">${diseaseAbbr}</span>`;
+                    tagCell.innerHTML = diseaseSpan;
+                    tagCell.append(document.createTextNode(userAddedPart)); // Use createTextNode to prevent HTML injection
+                }
+
+                if (patientCell.textContent) { updatePatientCellStyle(patientCell, data.tag || ''); }
 
                 if (row.classList.contains('split-shift')) { 
                     if(data.nurse_in) row.querySelector('.nurse-in').value = data.nurse_in; 
@@ -502,7 +531,7 @@
                     updateShiftPatientCount();
                     setStatus('複製成功，請記得儲存', 'unsaved');
                 } else {
-                    alert(`在雲端找不到 ${sourceDateStr} 的排程資料。`);
+                    alert(`在雲端找不到 ${sourceDateStr} 的排班資料。`);
                     setStatus('複製失敗', 'error');
                 }
             } catch (error) { 
@@ -610,7 +639,7 @@
             setStatus('內容已變更，尚未儲存', 'unsaved');
             if (e.target.classList.contains('patient-tag')) {
                 const patientCell = e.target.closest('.shift-row, .peripheral-shift-row').querySelector('.patient-name, .peripheral-patient-name');
-                updatePatientCellStyle(patientCell);
+                updatePatientCellStyle(patientCell, e.target.textContent);
             } else if (e.target.matches('.patient-name, .peripheral-patient-name')) {
                 updateShiftPatientCount();
                 updatePatientCellStyle(e.target);
