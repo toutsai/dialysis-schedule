@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V4.4 - 最終修正完整版)</title>
+    <title>門診週排班總表 (V4.5 - 多源病人數據讀取修正版)</title>
     <style>
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
@@ -165,7 +165,10 @@
     document.addEventListener('DOMContentLoaded', () => {
         const API = { 
             daily_records: 'https://6852ef850594059b23cfaa4f.mockapi.io/daily_records',
-            patients: 'https://6852ef850594059b23cfaa4f.mockapi.io/patients'
+            patients_ipd: 'https://6852ef850594059b23cfaa4f.mockapi.io/patients_ipd',
+            patients_opd_1: 'https://6852ef850594059b23cfaa4f.mockapi.io/patients_opd_1',
+            patients_opd_2: 'https://6852ef850594059b23cfaa4f.mockapi.io/patients_opd_2',
+            patients_opd_3: 'https://6852ef850594059b23cfaa4f.mockapi.io/patients_opd_3'
         };
         const SHIFTS = ['早班', '午班', '晚班'];
         const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
@@ -238,14 +241,29 @@
             });
         }
         
+        async function fetchAllActivePatients() {
+            const patientEndpoints = [
+                API.patients_ipd,
+                API.patients_opd_1,
+                API.patients_opd_2,
+                API.patients_opd_3,
+            ];
+            try {
+                const fetchPromises = patientEndpoints.map(url => fetch(url).then(res => res.ok ? res.json() : []));
+                const results = await Promise.all(fetchPromises);
+                allPatients = [].concat(...results).filter(p => p.isDeleted !== true);
+            } catch (error) {
+                console.error("Failed to fetch all patient data:", error);
+                allPatients = [];
+            }
+        }
+
         async function loadAllData() {
             weeklyScheduleData = {};
             dirtyDates.clear();
             statusText.textContent = '讀取中...';
             try {
-                const patientsRes = await fetch(API.patients);
-                if (!patientsRes.ok) throw new Error('無法獲取病人資料');
-                allPatients = (await patientsRes.json()).filter(p => !p.isDeleted);
+                await fetchAllActivePatients();
                 
                 const weekDates = Array.from({length: 6}, (_, i) => {
                     const d = new Date(currentWeekStartDate);
@@ -588,17 +606,21 @@
             if (!confirm('確定要清除本週所有的住院病人排班嗎？\n此操作將會標記所有住院排班等待刪除，需按「儲存變更」才會生效。')) return;
             let clearedCount = 0;
             Object.keys(weeklyScheduleData).forEach(dateStr => {
-                const dailySchedule = weeklyScheduleData[dateStr].schedule;
-                if (!dailySchedule) return;
-                Object.keys(dailySchedule).forEach(slotKey => {
-                    const patientId = dailySchedule[slotKey].patientId;
+                const dailyRecord = weeklyScheduleData[dateStr];
+                if (!dailyRecord || !dailyRecord.schedule) return;
+                let dateIsDirty = false;
+                Object.keys(dailyRecord.schedule).forEach(slotKey => {
+                    const patientId = dailyRecord.schedule[slotKey].patientId;
                     const patient = allPatients.find(p => p.id === patientId);
                     if (patient && patient.status === 'ipd') {
-                        delete dailySchedule[slotKey];
-                        dirtyDates.add(dateStr);
+                        delete dailyRecord.schedule[slotKey];
+                        dateIsDirty = true;
                         clearedCount++;
                     }
                 });
+                if (dateIsDirty) {
+                    dirtyDates.add(dateStr);
+                }
             });
             if (clearedCount > 0) {
                 alert(`已標記 ${clearedCount} 個住院排班待刪除，請點擊「儲存變更」以完成操作。`);
