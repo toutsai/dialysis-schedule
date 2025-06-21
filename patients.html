@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>透析病人管理系統 (V2.3 - 事件監聽修正版)</title>
+    <title>透析病人管理系統 (V2.4 - 唯一標識符修正版)</title>
     <style>
-        /* CSS is unchanged */
         :root { --green-bg: #e8f5e9; --green-text: #2e7d32; --blue-bg: #e3f2fd;  --blue-text: #1565c0; --orange-bg: #fff3e0; --orange-text: #ef6c00; --grey-bg: #f5f5f5; --grey-text: #616161; --red-text: #c62828; }
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f9f9f9; margin: 0; padding: 20px; }
         .container { max-width: 1400px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -80,8 +79,16 @@
         const API_BASE_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io';
         const API_ENDPOINTS = {
             ipd: [`${API_BASE_URL}/patients_ipd`],
-            opd: [`${API_BASE_URL}/patients_opd_1`, `${API_BASE_URL}/patients_opd_2`, `${API_BASE_URL}/patients_opd_3`],
-            deleted: [`${API_BASE_URL}/patients_deleted_1`, `${API_BASE_URL}/patients_deleted_2`, `${API_BASE_URL}/patients_deleted_3`]
+            opd: [
+                `${API_BASE_URL}/patients_opd_1`,
+                `${API_BASE_URL}/patients_opd_2`,
+                `${API_BASE_URL}/patients_opd_3`
+            ],
+            deleted: [
+                `${API_BASE_URL}/patients_deleted_1`,
+                `${API_BASE_URL}/patients_deleted_2`,
+                `${API_BASE_URL}/patients_deleted_3`
+            ]
         };
         const MOCKAPI_SOURCE_LIMIT = 100;
         
@@ -109,10 +116,12 @@
 
         async function fetchAllPatients() {
             const allEndpoints = [].concat(...Object.values(API_ENDPOINTS));
-            const fetchPromises = allEndpoints.map(url => fetch(url).then(res => {
-                if (!res.ok) { console.error(`Failed to fetch from ${url}`); return []; }
-                return res.json();
-            }).then(data => data.map(p => ({ ...p, sourceUrl: url }))) );
+            const fetchPromises = allEndpoints.map(url => 
+                fetch(url).then(res => {
+                    if (!res.ok) { console.error(`Failed to fetch from ${url}`); return []; }
+                    return res.json();
+                }).then(data => data.map(p => ({ ...p, sourceUrl: url })))
+            );
             try {
                 const results = await Promise.all(fetchPromises);
                 allPatients = [].concat(...results);
@@ -129,12 +138,14 @@
             let nextIndex = -1;
             for (let i = 0; i < totalSources; i++) {
                 try {
-                    const response = await fetch(API_ENDPOINTS[type][i]);
-                    if (!response.ok) continue;
-                    const data = await response.json();
-                    if (data.length < MOCKAPI_SOURCE_LIMIT) {
-                        nextIndex = i;
-                        break;
+                    const response = await fetch(API_ENDPOINTS[type][i] + '?page=1&limit=100');
+                    if (response.ok) {
+                         const countHeader = response.headers.get('x-total-count');
+                         const count = countHeader ? parseInt(countHeader, 10) : (await response.clone().json()).length;
+                         if (count < MOCKAPI_SOURCE_LIMIT) {
+                            nextIndex = i;
+                            break;
+                         }
                     }
                 } catch(e) {
                     console.error(`Error checking source count for ${type} at index ${i}:`, e);
@@ -175,13 +186,18 @@
             sortPatients(patients);
             tableBody.innerHTML = patients.map(p => {
                 const rowClass = getRowClass(p);
+                const actionButtons = (actions) => {
+                    return actions.map(action => 
+                        `<button data-action="${action.name}" data-id="${p.id}" data-source-url="${encodeURIComponent(p.sourceUrl)}">${action.label}</button>`
+                    ).join('');
+                };
                 let rowContent = '';
                 if (type === 'ipd') {
-                    rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.isFirstDialysis ? '✓' : ''}</td><td>${p.isDiscontinued ? '✓' : ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td><td class="action-buttons"><button data-action="edit" data-id="${p.id}">編輯</button><button data-action="transfer" data-id="${p.id}">轉門診</button><button data-action="delete" data-id="${p.id}">刪除</button></td>`;
+                    rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.isFirstDialysis ? '✓' : ''}</td><td>${p.isDiscontinued ? '✓' : ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td><td class="action-buttons">${actionButtons([{name: 'edit', label: '編輯'}, {name: 'transfer', label: '轉門診'}, {name: 'delete', label: '刪除'}])}</td>`;
                 } else if (type === 'opd') {
-                    rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.vascAccess || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td><td class="action-buttons"><button data-action="edit" data-id="${p.id}">編輯</button><button data-action="delete" data-id="${p.id}">刪除</button></td>`;
+                    rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.vascAccess || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td><td class="action-buttons">${actionButtons([{name: 'edit', label: '編輯'}, {name: 'delete', label: '刪除'}])}</td>`;
                 } else {
-                    rowContent = `<td>${p.name || ''}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.originalStatus === 'ipd' ? '住院' : '門診'}</td><td>${p.deleteReason || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.deletedAt)}</td><td><button data-action="restore" data-id="${p.id}">復原</button></td>`;
+                    rowContent = `<td>${p.name || ''}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.originalStatus === 'ipd' ? '住院' : '門診'}</td><td>${p.deleteReason || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.deletedAt)}</td><td>${actionButtons([{name: 'restore', label: '復原'}])}</td>`;
                 }
                 return `<tr class="${rowClass}">${rowContent}</tr>`;
             }).join('');
@@ -274,14 +290,16 @@
 
             let url; let method;
             if (id) {
-                const existingPatient = allPatients.find(p => p.id === id);
+                const existingPatient = allPatients.find(p => p.id === id); 
                 if (!existingPatient) { alert('找不到病人資料，無法更新。'); return; }
                 url = `${existingPatient.sourceUrl}/${id}`;
                 method = 'PUT';
             } else {
                 method = 'POST';
-                if (type === 'ipd') url = API_ENDPOINTS.ipd[0];
-                if (type === 'opd') url = API_ENDPOINTS.opd[opdNextWriteIndex];
+                let writeIndex;
+                if (type === 'ipd') { writeIndex = 0; }
+                else if (type === 'opd') { writeIndex = opdNextWriteIndex; }
+                url = API_ENDPOINTS[type][writeIndex];
                 patientData.createdAt = new Date().toISOString();
             }
 
@@ -294,14 +312,13 @@
         };
 
         async function movePatient(patient, newStatus, additionalData = {}) {
-            let targetUrl;
-            let targetIndex;
+            let targetUrl; let targetIndex;
             if (newStatus === 'deleted') {
                 targetIndex = deletedNextWriteIndex;
                 if (targetIndex === -1) {
                     if(!confirm("刪除病人儲存空間已滿！\n\n- 按[確定]將會自動備份並清空最舊的已刪除病人資料，然後完成此操作。\n- 按[取消]將取消。")) return false;
                     await exportAndClearOldestSource('deleted');
-                    targetIndex = 0; // After clearing, the index resets to 0
+                    targetIndex = 0;
                 }
                 targetUrl = API_ENDPOINTS.deleted[targetIndex];
             } else if (newStatus === 'opd') {
@@ -323,16 +340,10 @@
                 delete newPatientData.id;
                 delete newPatientData.sourceUrl;
                 
-                const createResponse = await fetch(targetUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(newPatientData)
-                });
+                const createResponse = await fetch(targetUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newPatientData) });
                 if (!createResponse.ok) throw new Error(`Failed to create patient in new location ${targetUrl}`);
-
                 const deleteResponse = await fetch(`${patient.sourceUrl}/${patient.id}`, { method: 'DELETE' });
                 if (!deleteResponse.ok) console.warn(`Failed to delete patient from old location ${patient.sourceUrl}/${patient.id}, manual cleanup may be needed.`);
-                
                 return true;
             } catch (error) {
                 console.error("Move patient failed:", error);
@@ -341,44 +352,35 @@
             }
         }
         
-        const transferToOpd = async (id) => { 
+        const transferToOpd = async (id, sourceUrl) => { 
             if (!confirm('確定要將此病人轉為門診常規嗎？')) return;
-            const patient = allPatients.find(p => p.id === id);
+            const patient = allPatients.find(p => p.id === id && p.sourceUrl === sourceUrl);
             if (!patient) return;
-            
-            if (await movePatient(patient, 'opd')) {
-                await fetchAllPatients();
-            }
+            if (await movePatient(patient, 'opd')) { await fetchAllPatients(); }
         };
 
-        const archivePatient = async (id, reason) => {
-            const patient = allPatients.find(p => p.id === id);
+        const archivePatient = async (id, sourceUrl, reason) => {
+            const patient = allPatients.find(p => p.id === id && p.sourceUrl === sourceUrl);
             if (!patient) return;
-            
             const archiveData = { isDeleted: true, originalStatus: patient.status, deleteReason: reason, deletedAt: new Date().toISOString() };
-            if(await movePatient(patient, 'deleted', archiveData)){
-                await fetchAllPatients();
-            }
+            if(await movePatient(patient, 'deleted', archiveData)){ await fetchAllPatients(); }
         };
 
-        const restorePatient = async (id) => {
-            const patient = allPatients.find(p => p.id === id);
+        const restorePatient = async (id, sourceUrl) => {
+            const patient = allPatients.find(p => p.id === id && p.sourceUrl === sourceUrl);
             if (!patient || !confirm(`確定要將病人「${patient.name}」復原到「${patient.originalStatus === 'ipd' ? '住院' : '門診'}」列表嗎？`)) return;
-
             const targetStatus = patient.originalStatus || 'opd';
             const restoreData = { isDeleted: false, deleteReason: null, deletedAt: null };
-            if(await movePatient(patient, targetStatus, restoreData)){
-                await fetchAllPatients();
-            }
+            if(await movePatient(patient, targetStatus, restoreData)){ await fetchAllPatients(); }
         };
 
-        const deletePatient = (id) => {
+        const deletePatient = (id, sourceUrl) => {
             const optionsContainer = document.getElementById('delete-reason-options');
             optionsContainer.innerHTML = DELETE_REASONS.map(reason => `<button value="${reason}">${reason}</button>`).join('');
             const handleReasonSelection = (event) => {
                 const selectedReason = event.target.value;
                 if(selectedReason && selectedReason !== 'cancel') {
-                    archivePatient(id, selectedReason);
+                    archivePatient(id, sourceUrl, selectedReason);
                 }
                 deleteDialog.close();
             };
@@ -404,7 +406,6 @@
             try {
                 const response = await fetch(sourceUrlToClear);
                 const dataToBackup = await response.json();
-                
                 if (dataToBackup.length > 0) {
                     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dataToBackup, null, 2));
                     const downloadAnchorNode = document.createElement('a');
@@ -414,11 +415,9 @@
                     downloadAnchorNode.click();
                     downloadAnchorNode.remove();
                 }
-                
                 alert(`即將清空最舊的「${type === 'opd' ? '門診' : '已刪除'}」病人資料庫以釋放空間。\n相關備份檔已自動下載。`);
                 const deletePromises = dataToBackup.map(p => fetch(`${sourceUrlToClear}/${p.id}`, { method: 'DELETE' }));
                 await Promise.all(deletePromises);
-                
                 if(type === 'opd') opdNextWriteIndex = 0;
                 if(type === 'deleted') deletedNextWriteIndex = 0;
             } catch (error) {
@@ -427,40 +426,43 @@
             }
         }
         
-        // --- CHANGE START: Corrected event listener logic ---
         document.querySelector('.container').addEventListener('click', (e) => {
             const target = e.target;
-            const action = target.dataset.action;
-            const id = target.dataset.id;
             
-            // Handle actions on table rows
-            if (action && id) {
-                const patient = allPatients.find(p => p.id === id);
-                if (!patient) return;
-                switch(action) {
-                    case 'edit': openModal(patient.status, patient); break;
-                    case 'transfer': transferToOpd(id); break;
-                    case 'delete': deletePatient(id); break;
-                    case 'restore': restorePatient(id); break;
-                }
-            } 
-            // Handle buttons in toolbars and other areas
-            else if (target.id === 'add-ipd-btn') { openModal('ipd'); }
-            else if (target.id === 'add-opd-btn') { openModal('opd'); } 
-            else if (target.id === 'export-all-patients-btn') { exportAllPatients(); }
-        });
+            // Handle buttons with specific IDs first
+            if (target.id === 'add-ipd-btn') { openModal('ipd'); return; }
+            if (target.id === 'add-opd-btn') { openModal('opd'); return; } 
+            if (target.id === 'export-all-patients-btn') { exportAllPatients(); return; }
 
-        // Event listener for tabs
-        tabButtons.forEach(button => {
-            button.addEventListener('click', (e) => {
-                const targetTab = e.currentTarget.dataset.tab;
+            // Handle tab buttons
+            if (target.classList.contains('tab-button')) {
+                const targetTab = target.dataset.tab;
                 tabButtons.forEach(btn => btn.classList.remove('active'));
                 tabContents.forEach(content => content.classList.remove('active'));
-                e.currentTarget.classList.add('active');
+                target.classList.add('active');
                 document.getElementById(targetTab).classList.add('active');
-            });
+                return;
+            }
+
+            // Handle action buttons on table rows
+            const action = target.dataset.action;
+            const id = target.dataset.id;
+            const sourceUrl = target.dataset.sourceUrl ? decodeURIComponent(target.dataset.sourceUrl) : null;
+            
+            if (action && id && sourceUrl) {
+                const patient = allPatients.find(p => p.id === id && p.sourceUrl === sourceUrl);
+                if (!patient) {
+                    console.error("Could not find patient with id:", id, "and sourceUrl:", sourceUrl);
+                    return;
+                }
+                switch(action) {
+                    case 'edit': openModal(patient.status, patient); break;
+                    case 'transfer': transferToOpd(id, sourceUrl); break;
+                    case 'delete': deletePatient(id, sourceUrl); break;
+                    case 'restore': restorePatient(id, sourceUrl); break;
+                }
+            }
         });
-        // --- CHANGE END ---
 
         document.querySelector('.close-button').addEventListener('click', closeModal);
         window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
