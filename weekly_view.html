@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V5.2 - 全新工作流重構版)</title>
+    <title>門診週排班總表 (V5.3 - 日期顯示修正版)</title>
     <style>
+        /* All CSS is unchanged from V4.5 */
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
             --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
@@ -62,7 +63,7 @@
         .weekly-schedule-table tbody td:nth-child(2) { left: 80px; }
         .hepatitis-bed td { background-color: var(--hepatitis-bg); }
         .hepatitis-bed td:nth-child(1), .hepatitis-bed td:nth-child(2) { background-color: var(--hepatitis-bg) !important; }
-        .schedule-slot { width: 100%; height: 100%; box-sizing: border-box; border-radius: 5px; padding: 5px; cursor: pointer; transition: background-color 0.2s; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; }
+        .schedule-slot { width: 100%; height: 100%; box-sizing: border-box; border-radius: 5px; padding: 5px; cursor: pointer; transition: background-color: 0.2s; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; }
         .schedule-slot:not(.filled):hover { background-color: #e0e0e0; }
         .schedule-slot.filled { cursor: pointer; }
         .schedule-slot.filled.status-opd { background-color: var(--green-bg); }
@@ -219,14 +220,17 @@
         
         async function initialize() {
             renderWeeklyScheduleTableFrame();
-            updateDisplay();
+            updateDisplayStatic();
             await loadAllData();
             setupDialogListeners();
         }
 
-        function updateDisplay() {
+        function updateDisplayStatic() {
             updateWeekDisplay();
             updateTableHeaderDates();
+        }
+        
+        function updateDisplayDynamic() {
             populateScheduleData();
             updateStatsToolbar();
             updateStatusIndicator();
@@ -273,7 +277,6 @@
             statusText.textContent = '讀取中...';
             try {
                 await fetchAllActivePatients();
-                renderInpatientList();
                 
                 const weekDates = Array.from({length: 6}, (_, i) => {
                     const d = new Date(currentWeekStartDate);
@@ -293,14 +296,12 @@
                 });
                 
                 statusText.textContent = loadedCount > 0 ? `已從雲端載入 ${loadedCount} 天的資料` : '本週無常規排班資料';
-                populateScheduleData();
-                updateStatsToolbar();
-                updateStatusIndicator();
+                updateDisplayDynamic();
             } catch (error) { 
                 console.error("Failed to fetch data:", error); 
                 statusText.textContent = '讀取失敗';
                 alert(`讀取雲端資料失敗: ${error.message}\n將顯示空白表格。`); 
-                updateDisplay();
+                updateDisplayDynamic();
             }
         }
         
@@ -346,7 +347,7 @@
                     const patient = allPatients.find(p => p.id === schedule.patientId);
                     if (patient) {
                         slot.classList.add('filled', `status-${patient.status || 'opd'}`);
-                        slot.innerHTML = `<div class="slot-patient-name">${patient.name}${generateDiseaseTags(patient.diseases)}</div><div class="slot-patient-mode">${patient.mode || ''}</div>`;
+                        slot.innerHTML = `<div class="slot-patient-name">${patient.name}</div><div class="slot-patient-mode">${patient.mode || ''}</div>`;
                     } else {
                         slot.classList.add('filled');
                         slot.innerHTML = `<div class="slot-patient-name" style="color:red;">病人ID<br>${schedule.patientId}<br>不存在</div>`;
@@ -417,7 +418,6 @@
                 if (isPatientScheduledThisWeek(p.id)) li.classList.add('scheduled-inpatient');
                 const remarks = p.remarks ? p.remarks.trim() : '無備註';
                 const diseaseAbbr = (p.diseases || []).map(d => DISEASE_ABBR_MAP[d] || '').join('');
-
                 li.innerHTML = `
                     <div class="patient-info-row">
                         <span class="name">${p.name}</span>
@@ -480,12 +480,10 @@
                 const matchesSearch = !term || p.name.toLowerCase().includes(term) || (p.medicalRecordNumber && p.medicalRecordNumber.includes(term));
                 return matchesType && matchesSearch;
             });
-
             if (patientsToShow.length === 0) {
                 patientListContainer.innerHTML = `<div style="padding: 20px; text-align:center; color: #888;">無符合條件的病人</div>`;
                 return;
             }
-
             patientListContainer.innerHTML = patientsToShow.map(p => `
                 <div class="patient-list-item" data-patient-id="${p.id}">
                     <div class="patient-main-info">
@@ -498,7 +496,6 @@
                     </div>
                 </div>
             `).join('');
-            
             if(dialogState.selectedPatientId) {
                 const selectedItem = patientListContainer.querySelector(`[data-patient-id="${dialogState.selectedPatientId}"]`);
                 if(selectedItem) {
@@ -667,12 +664,17 @@
                 const savePromises = [];
                 for (const dateStr of dirtyDates) {
                     const dataToSave = weeklyScheduleData[dateStr];
-                    
-                    if (!dataToSave || Object.keys(dataToSave.schedule || {}).length === 0) {
-                        if (dataToSave && dataToSave.id) {
-                            savePromises.push(fetch(`${API.daily_records}/${dataToSave.id}`, { method: 'DELETE' }));
+                    if (!dataToSave) { 
+                        const potentialPhantom = Object.values(weeklyScheduleData).find(r => r.date === dateStr);
+                        if(potentialPhantom && potentialPhantom.id) {
+                            savePromises.push(fetch(`${API.daily_records}/${potentialPhantom.id}`, { method: 'DELETE' }));
                         }
-                    } else {
+                        continue;
+                    };
+                    
+                    if (Object.keys(dataToSave.schedule || {}).length === 0 && dataToSave.id) {
+                        savePromises.push(fetch(`${API.daily_records}/${dataToSave.id}`, { method: 'DELETE' }));
+                    } else if (Object.keys(dataToSave.schedule || {}).length > 0) {
                         const method = dataToSave.id ? 'PUT' : 'POST';
                         const url = dataToSave.id ? `${API.daily_records}/${dataToSave.id}` : API.daily_records;
                         savePromises.push(fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToSave) }));
@@ -752,6 +754,8 @@
             const newDate = new Date(currentWeekStartDate);
             newDate.setDate(newDate.getDate() + days);
             currentWeekStartDate = newDate;
+            // Only update static parts and then load data
+            updateDisplayStatic();
             loadAllData();
         };
 
