@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>護理師組別統計報表 (V23.10 - API更新版)</title>
+    <title>護理師組別統計報表 (V23.11 - PATCH優化版)</title>
     <style>
         /* CSS inalterado */
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; padding: 20px; background-color: #f9f9f9; }
@@ -67,9 +67,7 @@
     </div>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        // --- CHANGE START: Update API URL ---
         const API_BASE_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/schedules';
-        // --- CHANGE END ---
         let currentDate = new Date();
         let currentRecord = null;
         
@@ -117,13 +115,31 @@
             }
         }
 
+        // --- CHANGE START: Modify save logic to use PATCH ---
         async function saveNamesToCloud(namesObject) {
-            if (!currentRecord) { alert("目前日期沒有排程資料，無法儲存。"); return; }
-            currentRecord.names = namesObject;
+            if (!currentRecord) {
+                alert("目前日期沒有排程資料，無法儲存。");
+                return;
+            }
+
+            // The data to send is just the names object.
+            const dataToPatch = {
+                names: namesObject
+            };
+            
             setStatus('儲存中...');
             try {
-                const response = await fetch(`${API_BASE_URL}/${currentRecord.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(currentRecord) });
+                const response = await fetch(`${API_BASE_URL}/${currentRecord.id}`, {
+                    method: 'PATCH', // Use PATCH for partial update
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(dataToPatch) // Send only the changed part
+                });
+
                 if (!response.ok) throw new Error('Save error');
+                
+                // Update the local record to reflect the change
+                currentRecord.names = namesObject;
+
                 const action = Object.keys(namesObject).length > 0 ? '儲存' : '清空';
                 setStatus(`姓名資料已於 ${new Date().toLocaleTimeString()} ${action}成功`);
                 alert(`護理師姓名資料已成功${action}！`);
@@ -132,6 +148,7 @@
                 setStatus('儲存失敗');
             }
         }
+        // --- CHANGE END ---
         
         function clearNames() {
             if (!currentRecord) { alert("目前沒有資料可清空。"); return; }
@@ -187,20 +204,12 @@
             updateAndLoad(newDate);
         }
 
-        function goToToday() {
-            updateAndLoad(new Date());
-        }
-
+        function goToToday() { updateAndLoad(new Date()); }
         function initialize() {
             const urlParams = new URLSearchParams(window.location.search);
             const dateFromUrl = urlParams.get('date');
-            
             const initialDate = dateFromUrl ? new Date(dateFromUrl + 'T00:00:00') : new Date();
-            if (isNaN(initialDate.getTime())) {
-                 updateAndLoad(new Date());
-            } else {
-                 updateAndLoad(initialDate);
-            }
+            if (isNaN(initialDate.getTime())) { updateAndLoad(new Date()); } else { updateAndLoad(initialDate); }
         }
 
         saveNamesBtn.addEventListener('click', () => {
