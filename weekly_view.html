@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V4.5 - 多源病人數據讀取修正版)</title>
+    <title>門診週排班總表 (V4.6 - 強制同步與渲染修正版)</title>
     <style>
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
@@ -254,7 +254,8 @@
                 allPatients = [].concat(...results).filter(p => p.isDeleted !== true);
             } catch (error) {
                 console.error("Failed to fetch all patient data:", error);
-                allPatients = [];
+                allPatients = []; // Reset on failure
+                throw error; // Re-throw to be caught by the calling function
             }
         }
 
@@ -287,7 +288,7 @@
             } catch (error) { 
                 console.error("Failed to fetch data:", error); 
                 statusText.textContent = '讀取失敗';
-                alert(`讀取雲端資料失敗: ${error.message}\n將顯示空白表格。`); 
+                alert(`讀取資料失敗: ${error.message}\n將顯示空白表格。`); 
                 updateDisplay();
             }
         }
@@ -389,7 +390,7 @@
         }
 
         function renderInpatientList() {
-            let inpatients = allPatients.filter(p => p.status === 'ipd');
+            let inpatients = allPatients.filter(p => p.status === 'ipd' && !p.isDeleted);
             const regularFreqs = ['一三五', '二四六'];
             if (inpatientFilter === '135') inpatients = inpatients.filter(p => p.frequency === '一三五');
             else if (inpatientFilter === '246') inpatients = inpatients.filter(p => p.frequency === '二四六');
