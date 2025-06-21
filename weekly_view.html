@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V5.0 - 全新工作流重構版)</title>
+    <title>門診週排班總表 (V4.7 - 最終修正完整版)</title>
     <style>
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
@@ -205,13 +205,20 @@
         const filterGroup = document.querySelector('.filter-group');
         const deleteScheduleDialog = document.getElementById('delete-schedule-dialog');
 
-        const formatDate = (date) => { const d = new Date(date); const year = d.getFullYear(); const month = (d.getMonth() + 1).toString().padStart(2, '0'); const day = d.getDate().toString().padStart(2, '0'); return `${year}-${month}-${day}`; };
+        const formatDate = (date) => {
+            if (!(date instanceof Date) || isNaN(date)) return '';
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
         const getStartOfWeek = (date) => { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(new Date(d.setDate(diff)).setHours(0,0,0,0)); };
         const getDisplayDate = (date, withYear = false) => { const d = new Date(date); if (isNaN(d.getTime())) return ''; const year = d.getFullYear(); const month = d.getMonth() + 1; const day = d.getDate(); return withYear ? `${year}/${month}/${day}` : `${month}/${day}`; };
         const generateDiseaseTags = (diseases) => { if (!diseases || diseases.length === 0) return ''; return diseases.map(d => `<span class="disease-tag">${d}</span>`).join(''); };
         
         async function initialize() {
             renderWeeklyScheduleTableFrame();
+            updateDisplay(); // Show frame immediately
             await loadAllData();
             setupDialogListeners();
         }
@@ -254,7 +261,7 @@
                 allPatients = [].concat(...results).filter(p => p.isDeleted !== true);
             } catch (error) {
                 console.error("Failed to fetch all patient data:", error);
-                allPatients = [];
+                allPatients = []; 
                 throw error;
             }
         }
@@ -265,8 +272,7 @@
             statusText.textContent = '讀取中...';
             try {
                 await fetchAllActivePatients();
-                renderInpatientList();
-
+                
                 const weekDates = Array.from({length: 6}, (_, i) => {
                     const d = new Date(currentWeekStartDate);
                     d.setDate(d.getDate() + i);
@@ -285,15 +291,12 @@
                 });
                 
                 statusText.textContent = loadedCount > 0 ? `已從雲端載入 ${loadedCount} 天的資料` : '本週無常規排班資料';
-                populateScheduleData();
-                updateStatsToolbar();
-                updateStatusIndicator();
-
+                updateDisplay();
             } catch (error) { 
                 console.error("Failed to fetch data:", error); 
                 statusText.textContent = '讀取失敗';
                 alert(`讀取雲端資料失敗: ${error.message}\n將顯示空白表格。`); 
-                updateDisplay(); // Fallback to a full blank update on error
+                updateDisplay();
             }
         }
         
@@ -660,12 +663,19 @@
                 const savePromises = [];
                 for (const dateStr of dirtyDates) {
                     const dataToSave = weeklyScheduleData[dateStr];
-                    
-                    if (!dataToSave || Object.keys(dataToSave.schedule || {}).length === 0) {
-                        if (dataToSave && dataToSave.id) {
-                            savePromises.push(fetch(`${API.daily_records}/${dataToSave.id}`, { method: 'DELETE' }));
+                    if (!dataToSave) { 
+                        // This case can happen if a record was created and then cleared before saving.
+                        // We check if an ID exists to decide if we need to delete a phantom record.
+                        const potentialPhantom = Object.values(weeklyScheduleData).find(r => r.date === dateStr);
+                        if(potentialPhantom && potentialPhantom.id) {
+                            savePromises.push(fetch(`${API.daily_records}/${potentialPhantom.id}`, { method: 'DELETE' }));
                         }
-                    } else {
+                        continue;
+                    };
+                    
+                    if (Object.keys(dataToSave.schedule).length === 0 && dataToSave.id) {
+                        savePromises.push(fetch(`${API.daily_records}/${dataToSave.id}`, { method: 'DELETE' }));
+                    } else if (Object.keys(dataToSave.schedule || {}).length > 0) {
                         const method = dataToSave.id ? 'PUT' : 'POST';
                         const url = dataToSave.id ? `${API.daily_records}/${dataToSave.id}` : API.daily_records;
                         savePromises.push(fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataToSave) }));
