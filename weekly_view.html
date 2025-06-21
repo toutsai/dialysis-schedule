@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V4.1 - 完整無省略修正版)</title>
+    <title>門診週排班總表 (V4.2 - 備註整合版)</title>
     <style>
-        /* CSS is unchanged */
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
             --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
@@ -171,6 +170,7 @@
         const SHIFTS = ['早班', '午班', '晚班'];
         const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
         const FREQ_MAP = { '一三五': [0, 2, 4], '二四六': [1, 3, 5], '一四': [0, 3], '二五': [1, 4], '三六': [2, 5], '一五': [0, 4], '二六': [1, 5] };
+        const DISEASE_ABBR_MAP = { 'HIV': 'H', 'RPR': 'R', 'HBV': 'B', 'HCV': 'C', '隔離': '隔' };
         const bedLayout = [ 1,2,3,5,6,7,8,9,11,12,13,15,16,17,18,19,21,22,23,25,26,27,28,29, 31,32,33,35,36,37,38,39,51,52,53,55,56,57,58,59,61,62,63,65 ].sort((a, b) => a - b);
         const hepatitisBeds = [31, 32, 33, 35, 36];
         
@@ -496,6 +496,11 @@
             statusIndicator.style.display = dirtyDates.size > 0 ? 'inline' : 'none'; 
         };
 
+        const generateDiseaseAbbr = (diseases) => {
+            if (!diseases || diseases.length === 0) return '';
+            return diseases.map(d => DISEASE_ABBR_MAP[d] || '').join('');
+        };
+
         const handleAddSchedule = () => { 
             const patientId = dialogState.selectedPatientId;
             if (!patientId) return alert('請選擇一位病人！'); 
@@ -514,6 +519,8 @@
                 }
             }
             
+            const initialTag = generateDiseaseAbbr(patient.diseases);
+
             daysToFill.forEach(d_idx => { 
                 const currentDate = new Date(currentWeekStartDate);
                 currentDate.setDate(currentDate.getDate() + d_idx);
@@ -521,9 +528,14 @@
                 const slotKey = `${bed}-${shiftIndex}`;
 
                 if (!weeklyScheduleData[dateStr]) {
-                    weeklyScheduleData[dateStr] = { date: dateStr, schedule: {} };
+                    weeklyScheduleData[dateStr] = { date: dateStr, schedule: {}, names: {} };
                 }
-                weeklyScheduleData[dateStr].schedule[slotKey] = { patientId: patientId, nurse: '', tag: '' };
+                
+                weeklyScheduleData[dateStr].schedule[slotKey] = { 
+                    patientId: patientId, 
+                    nurse: '', 
+                    tag: initialTag 
+                };
                 dirtyDates.add(dateStr);
             }); 
 
@@ -625,7 +637,6 @@
                     if (!dataToSave) continue;
                     
                     if (Object.keys(dataToSave.schedule).length === 0 && dataToSave.id) {
-                        // If a schedule becomes empty, delete the record from the server
                         savePromises.push(fetch(`${API.daily_records}/${dataToSave.id}`, { method: 'DELETE' }));
                     } else if (Object.keys(dataToSave.schedule).length > 0) {
                         const method = dataToSave.id ? 'PUT' : 'POST';
