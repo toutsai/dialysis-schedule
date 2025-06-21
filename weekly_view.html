@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>門診週排班總表 (V4.2 - 備註整合版)</title>
+    <title>門診週排班總表 (V4.3 - 最終修正完整版)</title>
     <style>
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
@@ -470,16 +470,13 @@
             dialogState.slotId = slotId;
             dialogState.selectedPatientId = null;
             dialogState.currentTab = 'opd';
-
             const [bed, shiftIndex] = slotId.split('-');
             dialogTitle.textContent = `新增排班至 ${bed}號床 - ${SHIFTS[shiftIndex]}`;
             confirmBtn.disabled = true;
             patientSearchInput.value = '';
-            
             dialogTabs.querySelector('.active').classList.remove('active');
             dialogTabs.querySelector('[data-type="opd"]').classList.add('active');
             renderPatientListInDialog();
-
             addScheduleDialog.showModal();
         }
         
@@ -504,33 +501,26 @@
         const handleAddSchedule = () => { 
             const patientId = dialogState.selectedPatientId;
             if (!patientId) return alert('請選擇一位病人！'); 
-            
             const { slotId } = dialogState;
             const patient = allPatients.find(p => p.id === patientId); 
             const fillType = document.querySelector('input[name="fill-type"]:checked').value; 
-            
             const dayIndexesBasedOnFreq = FREQ_MAP[patient.frequency]; 
             const [bed, shiftIndex, startDayIndex] = slotId.split('-'); 
             const daysToFill = (fillType === 'frequency' && dayIndexesBasedOnFreq) ? dayIndexesBasedOnFreq : [parseInt(startDayIndex)];
-
             for (const d_idx of daysToFill) {
                 if (isPatientScheduledOnDay(patientId, d_idx)) {
                     alert(`新增失敗：病人 ${patient.name} 已於 ${WEEKDAYS[d_idx]} 有排班記錄。`); return;
                 }
             }
-            
             const initialTag = generateDiseaseAbbr(patient.diseases);
-
             daysToFill.forEach(d_idx => { 
                 const currentDate = new Date(currentWeekStartDate);
                 currentDate.setDate(currentDate.getDate() + d_idx);
                 const dateStr = formatDate(currentDate);
                 const slotKey = `${bed}-${shiftIndex}`;
-
                 if (!weeklyScheduleData[dateStr]) {
                     weeklyScheduleData[dateStr] = { date: dateStr, schedule: {}, names: {} };
                 }
-                
                 weeklyScheduleData[dateStr].schedule[slotKey] = { 
                     patientId: patientId, 
                     nurse: '', 
@@ -538,7 +528,6 @@
                 };
                 dirtyDates.add(dateStr);
             }); 
-
             addScheduleDialog.close(); 
             updateDisplay(); 
         };
@@ -549,7 +538,6 @@
             slotDate.setDate(slotDate.getDate() + parseInt(dayIndex));
             const dateStr = formatDate(slotDate);
             const slotKey = `${bed}-${shift}`;
-
             if(weeklyScheduleData[dateStr]?.schedule?.[slotKey]) {
                 delete weeklyScheduleData[dateStr].schedule[slotKey];
                 dirtyDates.add(dateStr);
@@ -565,7 +553,6 @@
             const { deletePatientId, deleteSlotId } = dialogState;
             const [bed, shiftIndex, startDayIndexStr] = deleteSlotId.split('-');
             const startDayIndex = parseInt(startDayIndexStr, 10);
-            
             for (let dayIndex = startDayIndex; dayIndex < WEEKDAYS.length; dayIndex++) {
                 const currentSlotId = `${bed}-${shiftIndex}-${dayIndex}`;
                 const currentDate = new Date(currentWeekStartDate);
@@ -573,7 +560,6 @@
                 const dateStr = formatDate(currentDate);
                 const slotKey = `${bed}-${shiftIndex}`;
                 const schedule = weeklyScheduleData[dateStr]?.schedule?.[slotKey];
-
                 if (schedule && schedule.patientId === deletePatientId) {
                      clearScheduleSlot(currentSlotId);
                 }
@@ -589,7 +575,6 @@
                 const dateStr = formatDate(currentDate);
                 const dailySchedule = weeklyScheduleData[dateStr]?.schedule;
                 if (!dailySchedule) continue;
-
                 for (const slotKey in dailySchedule) {
                     if (dailySchedule[slotKey].patientId === deletePatientId) {
                         delete dailySchedule[slotKey];
@@ -645,7 +630,10 @@
                     }
                 }
                  
-                await Promise.all(savePromises);
+                const responses = await Promise.all(savePromises);
+                const allOk = responses.every(res => res.ok);
+                if (!allOk) throw new Error('部分儲存請求失敗');
+
                 alert(`${dirtyDates.size} 天的變更已成功儲存！`); 
                 await loadAllData(); 
             } catch (error) { 
