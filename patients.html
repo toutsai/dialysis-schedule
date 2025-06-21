@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>透析病人管理系統 (V3.0 - 統一模型)</title>
+    <title>透析病人管理系統 (V4.0 - 環形儲存)</title>
     <style>
         :root { --green-bg: #e8f5e9; --green-text: #2e7d32; --blue-bg: #e3f2fd;  --blue-text: #1565c0; --orange-bg: #fff3e0; --orange-text: #ef6c00; --grey-bg: #f5f5f5; --grey-text: #616161; --red-text: #c62828; }
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f9f9f9; margin: 0; padding: 20px; }
@@ -17,6 +17,8 @@
         .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 15px; }
         .toolbar button { padding: 8px 15px; font-size: 1em; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
         .toolbar button:hover { background-color: #0056b3; }
+        .toolbar .search-group { display: flex; gap: 5px; }
+        .toolbar input { padding: 8px; border: 1px solid #ccc; border-radius: 5px; }
         .stats-area { display: flex; gap: 20px; font-size: 0.9em; }
         .patient-table { width: 100%; border-collapse: collapse; table-layout: auto; }
         .patient-table th, .patient-table td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap; }
@@ -38,6 +40,7 @@
         .close-button { color: #aaa; font-size: 28px; font-weight: bold; cursor: pointer; }
         .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; }
         .form-field { display: flex; flex-direction: column; }
+        .form-field.hidden { display: none; }
         .form-field label { margin-bottom: 5px; font-weight: bold; }
         .form-field input, .form-field select, .form-field textarea { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100%; box-sizing: border-box; }
         .form-field-full { grid-column: 1 / -1; }
@@ -53,7 +56,6 @@
         #delete-reason-dialog h3 { margin-top: 0; }
         #delete-reason-dialog .button-group { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
         #delete-reason-dialog button { width: 100%; padding: 10px; font-size: 1em; }
-        .form-field.hidden, fieldset.hidden { display: none; }
     </style>
 </head>
 <body>
@@ -66,7 +68,16 @@
         </div>
         <div id="ipd" class="tab-content active"><div class="toolbar"><button id="add-ipd-btn">新增住院病人</button><div class="stats-area" id="ipd-stats"></div></div><div class="table-wrapper"><table class="patient-table"><thead id="ipd-table-head"></thead><tbody id="ipd-table-body"></tbody></table></div></div>
         <div id="opd" class="tab-content"><div class="toolbar"><button id="add-opd-btn">新增門診病人</button><div class="stats-area" id="opd-stats"></div></div><div class="table-wrapper"><table class="patient-table"><thead id="opd-table-head"></thead><tbody id="opd-table-body"></tbody></table></div></div>
-        <div id="deleted" class="tab-content"><div class="toolbar"><div>已刪除病人紀錄</div></div><div class="table-wrapper"><table class="patient-table"><thead id="deleted-table-head"></thead><tbody id="deleted-table-body"></tbody></table></div></div>
+        <div id="deleted" class="tab-content">
+            <div class="toolbar">
+                <div class="search-group">
+                    <input type="text" id="deleted-search-input" placeholder="搜尋已刪除病人...">
+                    <button id="deleted-search-btn">搜尋</button>
+                </div>
+                <button id="export-deleted-btn">轉出已刪除清單</button>
+            </div>
+            <div class="table-wrapper"><table class="patient-table"><thead id="deleted-table-head"></thead><tbody id="deleted-table-body"></tbody></table></div>
+        </div>
     </div>
     <div id="patient-modal" class="modal"><div class="modal-content"><div class="modal-header"><h2 id="modal-title">病人資料</h2><span class="close-button">×</span></div><div id="modal-form-content"></div></div></div>
     <dialog id="delete-reason-dialog"><h3>請選擇刪除原因</h3><div id="delete-reason-options" class="button-group"></div><div class="button-group"><button id="delete-cancel-btn" value="cancel">取消</button></div></dialog>
@@ -100,10 +111,11 @@
             <div class="modal-footer"><button type="submit">儲存</button></div>
         </form>
     </template>
-
+    
+    <script src="api_manager.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const API_BASE_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/patients';
+        const patientApi = ApiManager('patients');
         const PHYSICIANS = ['廖丁瑩', '蔡宜潔', '蘇哲弘', '蔡亨政'];
         const FREQUENCIES = ['一三五', '二四六', '一四', '二五', '三六', '一五', '二六', '每周一次', '臨時'];
         const MODES = ['HD', 'SLED', 'CVVHDF', 'PP', 'DFPP'];
@@ -118,29 +130,85 @@
         const modalTitle = document.getElementById('modal-title');
         const modalFormContent = document.getElementById('modal-form-content');
         
-        // --- (Unchanged functions) ---
-        async function fetchAllPatients() { /* ... */ }
-        function renderAllTables() { /* ... */ }
-        function renderTable(type) { /* ... */ }
-        function handleSort(key) { /* ... */ };
-        const updateStats = () => { /* ... */ };
-        const getRowClass = (p) => { /* ... */ };
-        const generateDiseaseTags = (d) => { /* ... */ };
-        const sortPatients = (p) => { /* ... */ };
-        const closeModal = () => { /* ... */ };
+        const formatDate = (isoString) => isoString ? new Date(isoString).toLocaleDateString() : '';
+
+        async function fetchAllPatients() {
+            try {
+                allPatients = await patientApi.fetchAll();
+                renderAllTables();
+            } catch (error) {
+                console.error("Failed to fetch patients:", error);
+                alert(`讀取病人資料失敗！\n\n原因: ${error.message}\n\n請檢查網路連線，或稍後再試。`);
+            }
+        }
+
+        function renderAllTables(deletedSearchTerm = '') {
+            renderTable('ipd');
+            renderTable('opd');
+            renderTable('deleted', deletedSearchTerm);
+            updateStats();
+        }
+
+        function renderTable(type, searchTerm = '') {
+            const headersConfig = {
+                ipd: ['姓名', '病歷號', {key: 'physician', text:'會診醫師'}, {key: 'frequency', text:'頻率'}, '模式', '首透', '中止', '備註', {key: 'createdAt', text: '新增日期'}],
+                opd: ['姓名', '病歷號', {key: 'physician', text:'收案醫師'}, {key: 'frequency', text:'頻率'}, '模式', '血管通路', '備註', {key: 'createdAt', text: '新增日期'}],
+                deleted: ['姓名', '病歷號', '原狀態', '刪除原因', '備註', {key: 'deletedAt', text: '刪除日期'}]
+            };
+            const headers = headersConfig[type];
+            const tableHead = document.getElementById(`${type}-table-head`);
+            const tableBody = document.getElementById(`${type}-table-body`);
+            tableHead.innerHTML = `<tr>${headers.map(h => {
+                const key = (typeof h === 'object' ? h.key : h).toString().toLowerCase();
+                const text = typeof h === 'object' ? h.text : h;
+                return `<th data-sort-key="${key}">${text} <span class="sort-indicator"></span></th>`;
+            }).join('')}<th>操作</th></tr>`;
+            
+            let patients;
+            if (type === 'deleted') {
+                patients = allPatients.filter(p => p.isDeleted);
+                if (searchTerm) {
+                    const term = searchTerm.toLowerCase();
+                    patients = patients.filter(p => 
+                        p.name.toLowerCase().includes(term) || 
+                        (p.medicalRecordNumber && p.medicalRecordNumber.toLowerCase().includes(term))
+                    );
+                }
+            } else {
+                patients = allPatients.filter(p => p.status === type && !p.isDeleted);
+            }
+
+            sortPatients(patients);
+            tableBody.innerHTML = patients.map(p => {
+                const rowClass = getRowClass(p);
+                let rowContent = '';
+                if (type === 'ipd') {
+                    rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.isFirstDialysis ? '✓' : ''}</td><td>${p.isDiscontinued ? '✓' : ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td><td class="action-buttons"><button data-action="edit" data-id="${p.id}">編輯</button><button data-action="transfer-opd" data-id="${p.id}">轉門診</button><button data-action="delete" data-id="${p.id}">刪除</button></td>`;
+                } else if (type === 'opd') {
+                    rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.vascAccess || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td><td class="action-buttons"><button data-action="edit" data-id="${p.id}">編輯</button><button data-action="transfer-ipd" data-id="${p.id}">轉住院</button><button data-action="delete" data-id="${p.id}">刪除</button></td>`;
+                } else {
+                    rowContent = `<td>${p.name || ''}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.originalStatus === 'ipd' ? '住院' : '門診'}</td><td>${p.deleteReason || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.deletedAt)}</td><td><button data-action="restore" data-id="${p.id}">復原</button></td>`;
+                }
+                return `<tr class="${rowClass}">${rowContent}</tr>`;
+            }).join('');
+
+            tableHead.querySelectorAll('th[data-sort-key]').forEach(th => {
+                const key = th.dataset.sortKey;
+                const indicator = th.querySelector('.sort-indicator');
+                indicator.textContent = (key === currentSort.column) ? (currentSort.order === 'asc' ? '▲' : '▼') : '';
+                th.addEventListener('click', () => handleSort(key));
+            });
+        }
         
-        // --- CHANGE START: Unified openModal function ---
         const openModal = (type, patient = null) => {
             const template = document.getElementById('patient-form-template');
             modalFormContent.innerHTML = '';
             modalFormContent.appendChild(template.content.cloneNode(true));
-            
             const form = modalFormContent.querySelector('form');
             const physicianLabel = form.querySelector('#physician-label');
             const ipdFields = form.querySelectorAll('.ipd-field');
             const opdFields = form.querySelectorAll('.opd-field');
 
-            // 1. Populate all dropdowns
             const populateSelect = (selectId, options) => {
                 const select = form.querySelector(`#${selectId}`);
                 if (select) select.innerHTML = '<option value="">請選擇</option>' + options.map(o => `<option value="${o}">${o}</option>`).join('');
@@ -155,7 +223,6 @@
                 diseaseContainer.innerHTML = DISEASES.map(d => `<div class="checkbox-group"><input type="checkbox" id="disease-${d}" name="disease" value="${d}"><label for="disease-${d}">${d}</label></div>`).join('');
             }
 
-            // 2. Control field visibility and labels based on type
             if (type === 'ipd') {
                 modalTitle.textContent = patient ? '編輯住院病人' : '新增住院病人';
                 physicianLabel.textContent = '會診醫師';
@@ -168,7 +235,6 @@
                 opdFields.forEach(f => f.classList.remove('hidden'));
             }
 
-            // 3. Fill form with patient data if editing
             if (patient) {
                 form.querySelector('#patient-id').value = patient.id;
                 form.querySelector('#name').value = patient.name || '';
@@ -180,21 +246,17 @@
                 form.querySelectorAll('input[name="disease"]').forEach(cb => {
                     cb.checked = patient.diseases && patient.diseases.includes(cb.value);
                 });
-
-                // Fill both IPD and OPD fields, the hidden ones won't be visible
                 form.querySelector('#is-first-dialysis').checked = patient.isFirstDialysis || false;
                 form.querySelector('#is-discontinued').checked = patient.isDiscontinued || false;
-                form.querySelector('#first-dialysis-date').value = patient.firstDialysisDate || '';
-                form.querySelector('#access-creation-date').value = patient.accessCreationDate || '';
                 form.querySelector('#vasc-access').value = patient.vascAccess || '';
+                form.querySelector('#first-dialysis-date').value = patient.firstDialysisDate ? patient.firstDialysisDate.split('T')[0] : '';
+                form.querySelector('#access-creation-date').value = patient.accessCreationDate ? patient.accessCreationDate.split('T')[0] : '';
             }
-
             form.querySelector('#patient-type').value = type;
             form.addEventListener('submit', handleFormSubmit);
             modal.style.display = 'flex';
         };
 
-        // --- CHANGE START: Unified form submission logic ---
         const handleFormSubmit = async (e) => {
             e.preventDefault();
             const form = e.target;
@@ -203,41 +265,34 @@
 
             const selectedDiseases = Array.from(form.querySelectorAll('input[name="disease"]:checked')).map(cb => cb.value);
 
-            // Create a single data object with all possible fields
             let patientData = {
                 name: form.querySelector('#name').value,
                 medicalRecordNumber: form.querySelector('#medical-record-number').value,
+                status: type, 
                 physician: form.querySelector('#physician').value,
                 frequency: form.querySelector('#frequency').value,
                 mode: form.querySelector('#mode').value,
-                remarks: form.querySelector('#remarks').value,
                 diseases: selectedDiseases,
-                status: type, 
-                isDeleted: false,
-                // IPD fields
-                isFirstDialysis: form.querySelector('#is-first-dialysis').checked,
-                isDiscontinued: form.querySelector('#is-discontinued').checked,
-                // OPD fields
+                remarks: form.querySelector('#remarks').value,
                 vascAccess: form.querySelector('#vasc-access').value,
                 firstDialysisDate: form.querySelector('#first-dialysis-date').value,
                 accessCreationDate: form.querySelector('#access-creation-date').value,
+                isFirstDialysis: form.querySelector('#is-first-dialysis').checked,
+                isDiscontinued: form.querySelector('#is-discontinued').checked,
+                isDeleted: false,
+                originalStatus: null,
+                deleteReason: null,
+                deletedAt: null,
             };
             
-            const url = id ? `${API_BASE_URL}/${id}` : API_BASE_URL;
-            const method = id ? 'PUT' : 'POST';
-            if (!id) {
-                patientData.createdAt = new Date().toISOString();
-            }
-            
             try {
-                const response = await fetch(url, {
-                    method: method,
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(patientData)
-                });
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`儲存請求失敗: ${response.status} ${errorText}`);
+                if (id) {
+                    const originalPatient = allPatients.find(p => p.id === id);
+                    patientData._sourceEndpoint = originalPatient._sourceEndpoint;
+                    await patientApi.update(id, patientData);
+                } else {
+                    patientData.createdAt = new Date().toISOString();
+                    await patientApi.save(patientData);
                 }
                 await fetchAllPatients();
                 closeModal();
@@ -251,47 +306,106 @@
             try {
                 const originalPatient = allPatients.find(p => p.id === id);
                 if (!originalPatient) throw new Error("找不到原始病人資料");
-                
-                // When updating, we must send the complete object
                 const patientDataForUpdate = { ...originalPatient, ...dataToUpdate };
-                // The API might not like the temporary _sourceEndpoint property if you were using multi-endpoint logic
-                delete patientDataForUpdate._sourceEndpoint; 
-
-                const response = await fetch(`${API_BASE_URL}/${id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(patientDataForUpdate)
-                });
-
-                if (!response.ok) throw new Error('Update error');
+                await patientApi.update(id, patientDataForUpdate);
                 await fetchAllPatients();
             } catch (error) { console.error("Update failed:", error); alert("操作失敗！"); }
         };
-        // --- CHANGE END ---
 
-        const transferToOpd = (id) => { if (confirm('確定要將此病人轉為門診常規嗎？')) updatePatientField(id, { status: 'opd' }); };
-        const archivePatient = (id, reason) => { const patient = allPatients.find(p => p.id === id); updatePatientField(id, { isDeleted: true, status: 'deleted', originalStatus: patient.status, deleteReason: reason, deletedAt: new Date().toISOString() }); };
-        const restorePatient = (id) => { const patient = allPatients.find(p => p.id === id); if (patient && confirm(`確定要將病人「${patient.name}」復原到「${patient.originalStatus === 'ipd' ? '住院' : '門診'}」列表嗎？`)) updatePatientField(id, { isDeleted: false, status: patient.originalStatus, deleteReason: null, deletedAt: null }); };
-        const deletePatient = (id) => { /* ... (unchanged) ... */};
+        const deletePatient = (id) => {
+             const deleteDialog = document.getElementById('delete-reason-dialog');
+             const optionsContainer = document.getElementById('delete-reason-options');
+             optionsContainer.innerHTML = DELETE_REASONS.map(reason => `<button value="${reason}">${reason}</button>`).join(''); 
+             const handleReasonSelection = (event) => { 
+                const selectedReason = event.target.value; 
+                if(selectedReason && selectedReason !== 'cancel') {
+                    const patient = allPatients.find(p => p.id === id);
+                    if (patient) {
+                        updatePatientField(id, {
+                            isDeleted: true,
+                            status: 'deleted',
+                            originalStatus: patient.status,
+                            deleteReason: selectedReason,
+                            deletedAt: new Date().toISOString()
+                        });
+                    }
+                } 
+                deleteDialog.close(); 
+                optionsContainer.removeEventListener('click', handleReasonSelection);
+             }; 
+             optionsContainer.addEventListener('click', handleReasonSelection, { once: true }); 
+             document.getElementById('delete-cancel-btn').addEventListener('click', () => deleteDialog.close(), { once: true }); 
+             deleteDialog.showModal(); 
+        };
+
+        function exportDeletedToCSV() {
+            const deletedPatients = allPatients.filter(p => p.isDeleted);
+            if (deletedPatients.length === 0) {
+                alert("沒有已刪除的病人資料可供轉出。");
+                return;
+            }
+            const headers = ['姓名', '病歷號', '原狀態', '刪除原因', '刪除日期', '備註'];
+            const rows = deletedPatients.map(p => [
+                p.name,
+                p.medicalRecordNumber,
+                p.originalStatus === 'ipd' ? '住院' : '門診',
+                p.deleteReason,
+                formatDate(p.deletedAt),
+                p.remarks?.replace(/,/g, '，') || ''
+            ]);
+
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; // \uFEFF for BOM
+            csvContent += headers.join(",") + "\r\n";
+            rows.forEach(rowArray => {
+                let row = rowArray.join(",");
+                csvContent += row + "\r\n";
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `已刪除病人清單_${formatDate(new Date())}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // --- Setup Event Listeners ---
+        document.querySelector('.container').addEventListener('click', (e) => {
+            const target = e.target;
+            const action = target.dataset.action;
+            const id = target.dataset.id;
+            
+            if (action && id) {
+                const patient = allPatients.find(p => p.id === id);
+                if (!patient) return;
+                
+                switch(action) {
+                    case 'edit': openModal(patient.status, patient); break;
+                    case 'transfer-opd': if (confirm('確定要將此病人轉為門診常規嗎？')) updatePatientField(id, { status: 'opd' }); break;
+                    case 'transfer-ipd': if (confirm('確定要將此病人轉為住院嗎？')) updatePatientField(id, { status: 'ipd' }); break;
+                    case 'delete': deletePatient(id); break;
+                    case 'restore': updatePatientField(id, { isDeleted: false, status: patient.originalStatus, deleteReason: null, deletedAt: null }); break;
+                }
+            } else if (target.id === 'add-ipd-btn') {
+                openModal('ipd');
+            } else if (target.id === 'add-opd-btn') {
+                openModal('opd');
+            } else if (target.id === 'deleted-search-btn') {
+                const searchTerm = document.getElementById('deleted-search-input').value;
+                renderAllTables(searchTerm);
+            } else if (target.id === 'export-deleted-btn') {
+                exportDeletedToCSV();
+            }
+        });
         
-        // --- All other functions and event listeners (unchanged) ---
-        // (Full, unchanged code for brevity)
+        // All other minor functions and listeners
+        const closeModal = () => { modal.style.display = 'none'; modalFormContent.innerHTML = ''; };
         const tabButtons = document.querySelectorAll('.tab-button');
-        const tabContents = document.querySelectorAll('.tab-content');
-        const deleteDialog = document.getElementById('delete-reason-dialog');
-        deletePatient = (id) => { const optionsContainer = document.getElementById('delete-reason-options'); optionsContainer.innerHTML = DELETE_REASONS.map(reason => `<button value="${reason}">${reason}</button>`).join(''); const handleReasonSelection = (event) => { const selectedReason = event.target.value; if(selectedReason && selectedReason !== 'cancel') { archivePatient(id, selectedReason); } deleteDialog.close(); }; optionsContainer.addEventListener('click', handleReasonSelection, { once: true }); document.getElementById('delete-cancel-btn').addEventListener('click', () => deleteDialog.close(), { once: true }); deleteDialog.showModal(); };
-        document.querySelector('.container').addEventListener('click', (e) => { const target = e.target; const action = target.dataset.action; const id = target.dataset.id; if (action && id) { const patient = allPatients.find(p => p.id === id); const status = patient ? patient.status : (document.querySelector('.tab-button.active').dataset.tab); switch(action) { case 'edit': openModal(status, patient); break; case 'transfer': transferToOpd(id); break; case 'delete': deletePatient(id); break; case 'restore': restorePatient(id); break; } } else if (target.id === 'add-ipd-btn') { openModal('ipd'); } else if (target.id === 'add-opd-btn') { openModal('opd'); } });
         tabButtons.forEach(button => { button.addEventListener('click', (e) => { const targetTab = e.currentTarget.dataset.tab; tabButtons.forEach(btn => btn.classList.remove('active')); tabContents.forEach(content => content.classList.remove('active')); e.currentTarget.classList.add('active'); document.getElementById(targetTab).classList.add('active'); }); });
-        document.querySelector('.close-button').addEventListener('click', () => closeModal());
+        document.querySelector('.close-button').addEventListener('click', closeModal);
         window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-        closeModal = () => {modal.style.display = 'none';modalFormContent.innerHTML = '';};
-        sortPatients = (p) => {p.sort((a, b) => {const valA = a[currentSort.column] || '';const valB = b[currentSort.column] || '';const compare = String(valA).localeCompare(String(valB), 'zh-Hant');return currentSort.order === 'asc' ? compare : -compare;});};
-        generateDiseaseTags = (d) => {if (!d || d.length === 0) return '';return d.map(tag => `<span class="disease-tag">${tag}</span>`).join('');};
-        getRowClass = (p) => {if (p.status === 'deleted') return 'status-deleted';const biweeklyFreq = ['一四', '二五', '三六', '一五', '二六'];if (biweeklyFreq.includes(p.frequency)) return 'status-biweekly';if (p.status === 'ipd') return 'status-ipd';if (p.status === 'opd') return 'status-opd';return '';};
-        updateStats = () => {const ipdPatients = allPatients.filter(p => p.status === 'ipd' && !p.isDeleted);const opdPatients = allPatients.filter(p => p.status === 'opd' && !p.isDeleted);const ipdStatsDiv = document.getElementById('ipd-stats');const opdStatsDiv = document.getElementById('opd-stats');const generateStatsHTML = (patients) => {if (patients.length === 0) return '總人數: 0';const freqCounts = patients.reduce((acc, p) => {acc[p.frequency] = (acc[p.frequency] || 0) + 1;return acc;}, {});const freqString = Object.entries(freqCounts).map(([freq, count]) => `${freq || '未分類'}: ${count}人`).join(', ');return `總人數: ${patients.length} (${freqString})`;};ipdStatsDiv.innerHTML = generateStatsHTML(ipdPatients);opdStatsDiv.innerHTML = generateStatsHTML(opdPatients);};
-        handleSort = (key) => { if (currentSort.column === key) { currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc'; } else { currentSort.column = key; currentSort.order = 'asc'; } renderAllTables(); };
-        renderAllTables = () => { renderTable('ipd'); renderTable('opd'); renderTable('deleted'); updateStats(); };
-        renderTable = (type) => { const headersConfig = { ipd: ['姓名', '病歷號', {key: 'physician', text:'會診醫師'}, {key: 'frequency', text:'頻率'}, '模式', '首透', '中止', '備註', {key: 'createdAt', text: '新增日期'}], opd: ['姓名', '病歷號', {key: 'physician', text:'收案醫師'}, {key: 'frequency', text:'頻率'}, '模式', '血管通路', '備註', {key: 'createdAt', text: '新增日期'}], deleted: ['姓名', '病歷號', '原狀態', '刪除原因', '備註', {key: 'deletedAt', text: '刪除日期'}] }; const headers = headersConfig[type]; const tableHead = document.getElementById(`${type}-table-head`); const tableBody = document.getElementById(`${type}-table-body`); tableHead.innerHTML = `<tr>${headers.map(h => { const key = (typeof h === 'object' ? h.key : h).toString().toLowerCase(); const text = typeof h === 'object' ? h.text : h; return `<th data-sort-key="${key}">${text} <span class="sort-indicator"></span></th>`; }).join('')}<th>操作</th></tr>`; const patients = allPatients.filter(p => (type === 'deleted' ? p.status === 'deleted' : p.status === type && !p.isDeleted)); sortPatients(patients); tableBody.innerHTML = patients.map(p => { const rowClass = getRowClass(p); let rowContent = ''; if (type === 'ipd') { rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.isFirstDialysis ? '✓' : ''}</td><td>${p.isDiscontinued ? '✓' : ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td><td class="action-buttons"><button data-action="edit" data-id="${p.id}">編輯</button><button data-action="transfer" data-id="${p.id}">轉門診</button><button data-action="delete" data-id="${p.id}">刪除</button></td>`; } else if (type === 'opd') { rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.vascAccess || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td><td class="action-buttons"><button data-action="edit" data-id="${p.id}">編輯</button><button data-action="delete" data-id="${p.id}">刪除</button></td>`; } else { rowContent = `<td>${p.name || ''}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.originalStatus === 'ipd' ? '住院' : '門診'}</td><td>${p.deleteReason || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.deletedAt)}</td><td><button data-action="restore" data-id="${p.id}">復原</button></td>`; } return `<tr class="${rowClass}">${rowContent}</tr>`; }).join(''); tableHead.querySelectorAll('th[data-sort-key]').forEach(th => { const key = th.dataset.sortKey; const indicator = th.querySelector('.sort-indicator'); indicator.textContent = (key === currentSort.column) ? (currentSort.order === 'asc' ? '▲' : '▼') : ''; th.addEventListener('click', () => handleSort(key)); }); };
+
         fetchAllPatients();
     });
     </script>
