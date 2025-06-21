@@ -153,6 +153,18 @@
         </div>
     </dialog>
     
+    <!-- --- CHANGE START: Add new dialog for deletion options --- -->
+    <dialog id="delete-schedule-dialog">
+        <h3 id="delete-dialog-title">清除排班選項</h3>
+        <p>請選擇要如何清除此病人的排班：</p>
+        <div class="modal-footer" style="flex-direction: column; align-items: stretch; gap: 10px;">
+            <button id="delete-single-btn" data-action="single" style="background-color: var(--orange-bg); border-color: #ff9800;">僅刪除此格</button>
+            <button id="delete-subsequent-btn" data-action="subsequent" style="background-color: var(--danger-color); color: white; border-color: var(--danger-color);">刪除此格及本週之後的排班</button>
+            <button id="delete-cancel-btn" value="cancel">取消</button>
+        </div>
+    </dialog>
+    <!-- --- CHANGE END --- -->
+
     <script>
     document.addEventListener('DOMContentLoaded', () => {
         const API = { 
@@ -173,7 +185,11 @@
         let dialogState = {
             slotId: null,
             selectedPatientId: null,
-            currentTab: 'opd'
+            currentTab: 'opd',
+            // --- CHANGE START: Add state for deletion dialog ---
+            deleteSchedule: null,
+            deleteSlotId: null
+            // --- CHANGE END ---
         };
 
         const weekDisplay = document.getElementById('week-display');
@@ -189,6 +205,9 @@
         const statusText = document.getElementById('status-text');
         const inpatientList = document.getElementById('inpatient-list');
         const filterGroup = document.querySelector('.filter-group');
+        // --- CHANGE START: Get the new dialog element ---
+        const deleteScheduleDialog = document.getElementById('delete-schedule-dialog');
+        // --- CHANGE END ---
 
         function getStartOfWeek(date) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(new Date(d.setDate(diff)).setHours(0,0,0,0)); }
         const formatDate = (date, withYear = false) => { const d = new Date(date); if (isNaN(d.getTime())) return ''; const year = d.getFullYear(); const month = d.getMonth() + 1; const day = d.getDate(); return withYear ? `${year}/${month}/${day}` : `${month}/${day}`; };
@@ -379,7 +398,9 @@
                     const slotId = e.currentTarget.dataset.slotId; 
                     const schedule = pendingChanges.toAdd[slotId] || weeklyScheduleData[slotId]; 
                     if (schedule && !pendingChanges.toDelete[schedule.id]) { 
-                        clearScheduleSlot(schedule.id || slotId, slotId);
+                        // --- CHANGE START: Call new delete dialog instead of clearing directly ---
+                        openDeleteScheduleDialog(schedule, slotId);
+                        // --- CHANGE END ---
                     } else { 
                         openAddScheduleDialog(slotId); 
                     } 
@@ -417,9 +438,22 @@
                 }
             });
 
-            // --- CHANGE START: Add event listeners for dialog buttons ---
             confirmBtn.addEventListener('click', handleAddSchedule);
             cancelBtn.addEventListener('click', () => addScheduleDialog.close());
+            
+            // --- CHANGE START: Add listeners for the new delete dialog ---
+            deleteScheduleDialog.addEventListener('click', e => {
+                const action = e.target.dataset.action;
+                if (action === 'single') {
+                    handleDeleteSingle();
+                } else if (action === 'subsequent') {
+                    handleDeleteSubsequent();
+                }
+
+                if (e.target.value === 'cancel' || action) {
+                    deleteScheduleDialog.close();
+                }
+            });
             // --- CHANGE END ---
         }
         
@@ -476,6 +510,51 @@
 
             addScheduleDialog.showModal();
         }
+
+        // --- CHANGE START: New functions for delete dialog and actions ---
+        function openDeleteScheduleDialog(schedule, slotId) {
+            dialogState.deleteSchedule = schedule;
+            dialogState.deleteSlotId = slotId;
+
+            const patient = allPatients.find(p => p.id === schedule.patientId);
+            const dialogTitle = deleteScheduleDialog.querySelector('#delete-dialog-title');
+            
+            if (patient) {
+                dialogTitle.textContent = `清除 ${patient.name} 的排班`;
+            } else {
+                dialogTitle.textContent = `清除排班`;
+            }
+            deleteScheduleDialog.showModal();
+        }
+
+        function handleDeleteSingle() {
+            const { deleteSchedule, deleteSlotId } = dialogState;
+            clearScheduleSlot(deleteSchedule.id || deleteSlotId, deleteSlotId);
+            updateDisplay();
+        }
+
+        function handleDeleteSubsequent() {
+            const { deleteSchedule, deleteSlotId } = dialogState;
+            const patientIdToDelete = deleteSchedule.patientId;
+
+            const [bed, shiftIndex, startDayIndexStr] = deleteSlotId.split('-');
+            const startDayIndex = parseInt(startDayIndexStr, 10);
+            
+            // This object represents the final state after pending changes are applied
+            const currentFullSchedule = { ...weeklyScheduleData, ...pendingChanges.toAdd };
+
+            for (let dayIndex = startDayIndex; dayIndex < WEEKDAYS.length; dayIndex++) {
+                const currentSlotId = `${bed}-${shiftIndex}-${dayIndex}`;
+                const scheduleToClear = currentFullSchedule[currentSlotId];
+
+                // Check if a schedule exists in this slot, it's not already marked for deletion, and it belongs to the same patient
+                if (scheduleToClear && !pendingChanges.toDelete[scheduleToClear.id] && scheduleToClear.patientId === patientIdToDelete) {
+                     clearScheduleSlot(scheduleToClear.id || currentSlotId, currentSlotId);
+                }
+            }
+            updateDisplay();
+        }
+        // --- CHANGE END ---
         
         const updateStatusIndicator = () => { 
             const hasChanges = Object.keys(pendingChanges.toAdd).length > 0 || Object.keys(pendingChanges.toDelete).length > 0; 
@@ -511,13 +590,16 @@
         
         const clearScheduleSlot = (scheduleId, slotId) => { 
             const schedule = pendingChanges.toAdd[slotId] || weeklyScheduleData[slotId]; 
-            if (!schedule || !confirm('確定要清除這個排班嗎？(此操作需儲存後才會生效)')) return; 
+            // The confirmation is now handled by the new dialog, so we can remove it here.
+            // if (!schedule || !confirm('確定要清除這個排班嗎？(此操作需儲存後才會生效)')) return; 
+            if (!schedule) return;
+
             if (pendingChanges.toAdd[slotId]) { delete pendingChanges.toAdd[slotId]; } 
             
             const realId = schedule.id;
             if (realId) { pendingChanges.toDelete[realId] = true; } 
 
-            updateDisplay(); 
+            // No need to call updateDisplay() here, it will be called by the parent function (handleDeleteSingle/Subsequent)
         };
 
         const clearInpatientSchedules = () => {
