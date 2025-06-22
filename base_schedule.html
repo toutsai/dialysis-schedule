@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>常規門診週範本設定 (V1.0)</title>
+    <title>常規門診週範本設定</title>
     <style>
         :root {
             --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
@@ -11,14 +11,14 @@
             --hepatitis-bg: #fffde7; --hepatitis-border: #fff176;
             --blue-bg: #e3f2fd;
         }
-        body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: var(--sidebar-bg); margin: 0; padding: 20px; color: #212529; }
-        .container { max-width: 1800px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.075); }
-        .header-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px;}
+        body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: var(--sidebar-bg); margin: 0; padding: 20px; }
+        .container { max-width: 1800px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid var(--border-color); }
         .header-toolbar h1 { margin: 0; }
         .main-actions button { border: 1px solid #ccc; border-radius: 5px; padding: 8px 12px; font-size: 1em; cursor: pointer; background-color: #fff; }
         #save-changes-btn { background-color: var(--success-color); color: white; border-color: var(--success-color); }
         #save-changes-btn:disabled { background-color: #ccc; border-color: #ccc; cursor: not-allowed; }
-        .status-text { font-weight: bold; color: #6c757d; margin-left: auto; margin-right: 15px; }
+        .status-text { font-weight: bold; color: #6c757d; margin-right: 15px; }
         .table-wrapper { max-height: 80vh; overflow: auto; }
         .weekly-schedule-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .weekly-schedule-table th, .weekly-schedule-table td { border: 1px solid var(--border-color); padding: 4px; text-align: center; vertical-align: middle; height: 65px; }
@@ -34,8 +34,6 @@
         .schedule-slot:not(.filled):hover { background-color: #e0e0e0; }
         .schedule-slot.filled { cursor: pointer; background-color: var(--green-bg); }
         .slot-patient-name { font-weight: bold; }
-        .slot-patient-mode { font-size: 0.9em; color: #555; }
-        .disease-tag { color: var(--danger-color); font-weight: bold; margin-left: 5px; font-size: 0.9em; padding: 1px 4px; border: 1px solid var(--danger-color); border-radius: 4px; background-color: #fff; }
         dialog { border: 1px solid #ccc; border-radius: 8px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 90%; max-width: 600px; }
         dialog::backdrop { background-color: rgba(0,0,0,0.5); }
         dialog h3 { margin-top: 0; }
@@ -45,17 +43,9 @@
         .dialog-filters input, .dialog-filters select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
         #patient-list-container { max-height: 300px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; }
         .patient-list-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
-        .patient-list-item:hover { background-color: #f0f0f0; }
         .patient-list-item.selected { background-color: var(--blue-bg); font-weight: bold; }
-        .patient-main-info { display: flex; flex-direction: column; }
-        .patient-name { font-size: 1.1em; }
-        .patient-mrn { font-size: 0.85em; color: #6c757d; }
-        .patient-meta { display: flex; align-items: center; gap: 8px; font-size: 0.9em; }
-        .disease-tag-small { display: inline-block; padding: 1px 5px; font-size: 0.8em; font-weight: bold; color: var(--danger-color); border: 1px solid var(--danger-color); border-radius: 4px; }
         .modal-footer { margin-top: 20px; text-align: right; }
-        .modal-footer button { margin-left: 10px; }
         .radio-group { display: flex; align-items: center; gap: 8px; }
-        .radio-group input { width: auto; }
         #dialog-confirm-btn:disabled { background-color: #ccc; border-color: #ccc; cursor: not-allowed; }
     </style>
 </head>
@@ -64,7 +54,7 @@
         <div class="header-toolbar">
             <h1>常規門診週範本設定</h1>
             <div class="main-actions">
-                <span id="status-text" class="status-text"></span>
+                <span id="status-text"></span>
                 <button id="save-changes-btn" disabled>儲存範本</button>
             </div>
         </div>
@@ -79,30 +69,15 @@
     <dialog id="patient-select-dialog">
         <h3 id="dialog-title">選擇門診病人</h3>
         <div class="dialog-filters">
-            <div class="filter-group">
-                <label for="patient-search">姓名/病歷號</label>
-                <input type="text" id="patient-search" placeholder="搜尋...">
-            </div>
-            <div class="filter-group">
-                <label for="freq-filter">頻率</label>
-                <select id="freq-filter"><option value="">全部頻率</option></select>
-            </div>
-            <div class="filter-group">
-                <label for="disease-filter">須注意疾病</label>
-                <select id="disease-filter"><option value="">全部</option></select>
-            </div>
+            <div class="filter-group"><label for="patient-search">姓名/病歷號</label><input type="text" id="patient-search" placeholder="搜尋..."></div>
+            <div class="filter-group"><label for="freq-filter">頻率</label><select id="freq-filter"><option value="">全部頻率</option></select></div>
+            <div class="filter-group"><label for="disease-filter">須注意疾病</label><select id="disease-filter"><option value="">全部</option></select></div>
         </div>
         <div id="patient-list-container"></div>
         <div class="form-field" style="margin-top: 15px;">
             <label>填入方式：</label>
-            <div class="radio-group">
-                <input type="radio" id="fill-by-freq" name="fill-type" value="frequency" checked>
-                <label for="fill-by-freq">依病人預設頻率填入</label>
-            </div>
-            <div class="radio-group">
-                <input type="radio" id="fill-single" name="fill-type" value="single">
-                <label for="fill-single">僅排入此班次</label>
-            </div>
+            <div class="radio-group"><input type="radio" id="fill-by-freq" name="fill-type" value="frequency" checked><label for="fill-by-freq">依病人預設頻率填入</label></div>
+            <div class="radio-group"><input type="radio" id="fill-single" name="fill-type" value="single"><label for="fill-single">僅排入此班次</label></div>
         </div>
         <div class="modal-footer">
             <button id="dialog-cancel-btn" value="cancel">取消</button>
@@ -114,14 +89,8 @@
     <script>
     document.addEventListener('DOMContentLoaded', () => {
         const patientsApi = ApiManager('patients');
-        const BASE_SCHEDULE_APIS = {
-            0: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_mon',
-            1: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_tue',
-            2: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_wed',
-            3: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_thu',
-            4: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_fri',
-            5: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_sat',
-        };
+        const BASE_SCHEDULE_API_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/dialysis_base_schedule';
+        const BASE_SCHEDULE_RECORD_ID = '1';
         
         const SHIFTS = ['早班', '午班', '晚班'];
         const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
@@ -132,7 +101,7 @@
         const FREQ_MAP_TO_DAY_INDEX = { '一三五': [0, 2, 4], '二四六': [1, 3, 5], '一四': [0, 3], '二五': [1, 4], '三六': [2, 5], '一五': [0, 4], '二六': [1, 5] };
 
         let allOpdPatients = [];
-        let baseSchedule = new Map();
+        let baseSchedule = new Map(); // Use Map: "slotId" -> patientId
         let hasUnsavedChanges = false;
         let dialogState = { targetSlotId: null, selectedPatientId: null };
 
@@ -181,20 +150,18 @@
             saveBtn.disabled = true;
             statusText.textContent = '讀取中...';
             try {
-                const [patients, ...dailyBaseRecords] = await Promise.all([
+                const [patients, baseScheduleRes] = await Promise.all([
                     patientsApi.fetchAll(),
-                    ...Object.values(BASE_SCHEDULE_APIS).map(url => fetch(url).then(res => res.ok ? res.json() : []))
+                    fetch(BASE_SCHEDULE_API_URL).then(res => res.ok ? res.json() : [])
                 ]);
                 allOpdPatients = patients.filter(p => p.status === 'opd' && !p.isDeleted);
-                
                 baseSchedule.clear();
-                dailyBaseRecords.forEach((records, dayIndex) => {
-                    records.forEach(record => {
-                        const fullSlotId = `${record.slotId}-${dayIndex}`;
-                        baseSchedule.set(fullSlotId, record.patientId);
+                if (baseScheduleRes && baseScheduleRes.length > 0) {
+                    const scheduleData = baseScheduleRes[0].scheduleData || {};
+                    Object.entries(scheduleData).forEach(([slotId, patientId]) => {
+                        baseSchedule.set(slotId, patientId);
                     });
-                });
-                
+                }
                 populateScheduleData();
                 statusText.textContent = '常規模板已載入';
             } catch (error) { 
@@ -227,40 +194,28 @@
             saveBtn.disabled = true;
             statusText.textContent = '儲存中...';
             try {
-                const clearPromises = Object.values(BASE_SCHEDULE_APIS).map(async url => {
-                    const records = await fetch(url).then(res => res.json());
-                    return Promise.all(records.map(r => fetch(`${url}/${r.id}`, { method: 'DELETE' })));
+                const dataToSave = { scheduleData: Object.fromEntries(baseSchedule) };
+                const response = await fetch(`${BASE_SCHEDULE_API_URL}/${BASE_SCHEDULE_RECORD_ID}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(dataToSave)
                 });
-                await Promise.all(clearPromises);
-
-                const newScheduleByDay = {};
-                baseSchedule.forEach((patientId, fullSlotId) => {
-                    const [bed, shiftIndex, dayIndex] = fullSlotId.split('-');
-                    const slotId = `${bed}-${shiftIndex}`;
-                    if (!newScheduleByDay[dayIndex]) {
-                        newScheduleByDay[dayIndex] = [];
-                    }
-                    newScheduleByDay[dayIndex].push({ slotId, patientId });
-                });
-
-                const savePromises = Object.entries(newScheduleByDay).map(([dayIndex, records]) => {
-                    const url = BASE_SCHEDULE_APIS[dayIndex];
-                    return Promise.all(records.map(record => fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(record)
-                    })));
-                });
-                
-                await Promise.all(savePromises);
-
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        const createResponse = await fetch(BASE_SCHEDULE_API_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(dataToSave)
+                        });
+                        if (!createResponse.ok) throw new Error('建立新記錄失敗');
+                    } else { throw new Error(`儲存失敗，狀態碼: ${response.status}`); }
+                }
                 hasUnsavedChanges = false;
-                statusText.textContent = '範本儲存成功！';
-                saveBtn.disabled = true;
+                setStatus('範本儲存成功！', 'saved');
                 alert('常規門診範本已成功儲存！');
             } catch (error) {
                 console.error("儲存失敗:", error);
-                statusText.textContent = '儲存失敗';
+                setStatus('儲存失敗', 'error');
                 alert(`儲存失敗: ${error.message}`);
                 saveBtn.disabled = false;
             }
@@ -274,10 +229,8 @@
             dialog.querySelector('#patient-search').value = '';
             dialog.querySelector('#freq-filter').value = '';
             dialog.querySelector('#disease-filter').value = '';
-            
             const [bed, shift, day] = slotId.split('-');
             dialog.querySelector('#dialog-title').textContent = `為 床號 ${bed} - ${SHIFTS[shift]} (${WEEKDAYS[day]}) 選擇病人`;
-
             renderPatientListInDialog();
             dialog.showModal();
         }
@@ -287,19 +240,16 @@
             const searchTerm = document.getElementById('patient-search').value.toLowerCase();
             const selectedFreq = document.getElementById('freq-filter').value;
             const selectedDisease = document.getElementById('disease-filter').value;
-
             const patientsToShow = allOpdPatients.filter(p => {
                 const matchesSearch = !searchTerm || (p.name && p.name.toLowerCase().includes(searchTerm)) || (p.medicalRecordNumber && p.medicalRecordNumber.includes(searchTerm));
                 const matchesFreq = !selectedFreq || p.frequency === selectedFreq;
                 const matchesDisease = !selectedDisease || (p.diseases && p.diseases.includes(selectedDisease));
                 return matchesSearch && matchesFreq && matchesDisease;
             });
-            
             if (patientsToShow.length === 0) {
                 patientListContainer.innerHTML = `<div style="padding: 20px; text-align:center; color: #888;">無符合條件的門診病人</div>`;
                 return;
             }
-
             patientListContainer.innerHTML = patientsToShow.map(p => `
                 <div class="patient-list-item" data-patient-id="${p.id}">
                     <div class="patient-main-info">
@@ -317,7 +267,6 @@
         function handleGridClick(e) {
             const slot = e.target.closest('.schedule-slot');
             if (!slot) return;
-            
             const slotId = slot.dataset.slotId;
             if (slot.classList.contains('filled')) {
                 const patientId = baseSchedule.get(slotId);
@@ -328,9 +277,7 @@
                     populateScheduleData();
                 } else if (choice === '2') {
                     baseSchedule.forEach((pid, sid) => {
-                        if (pid === patientId) {
-                            baseSchedule.delete(sid);
-                        }
+                        if (pid === patientId) { baseSchedule.delete(sid); }
                     });
                     setChange();
                     populateScheduleData();
@@ -340,9 +287,30 @@
             }
         }
         
+        function handleAddSchedule() {
+            const patientId = dialogState.selectedPatientId;
+            if (!patientId) return;
+            const slotId = dialogState.targetSlotId;
+            const patient = allOpdPatients.find(p => p.id === patientId);
+            const fillType = document.querySelector('input[name="fill-type"]:checked').value;
+            const freq = patient.frequency;
+            const [bed, shiftIndex] = slotId.split('-');
+            if (fillType === 'frequency' && freq && FREQ_MAP_TO_DAY_INDEX[freq]) {
+                const dayIndexes = FREQ_MAP_TO_DAY_INDEX[freq];
+                dayIndexes.forEach(dayIndex => {
+                    const newSlotId = `${bed}-${shiftIndex}-${dayIndex}`;
+                    baseSchedule.set(newSlotId, patientId);
+                });
+            } else {
+                baseSchedule.set(slotId, patientId);
+            }
+            setChange();
+            populateScheduleData();
+            document.getElementById('patient-select-dialog').close();
+        }
+
         function setupEventListeners() {
             document.getElementById('weekly-schedule-body').addEventListener('click', handleGridClick);
-
             const dialog = document.getElementById('patient-select-dialog');
             const confirmBtn = document.getElementById('dialog-confirm-btn');
             const cancelBtn = document.getElementById('dialog-cancel-btn');
@@ -350,11 +318,9 @@
             const freqFilter = document.getElementById('freq-filter');
             const diseaseFilter = document.getElementById('disease-filter');
             const patientListContainer = document.getElementById('patient-list-container');
-
-            patientSearchInput.addEventListener('input', () => renderPatientListInDialog());
-            freqFilter.addEventListener('change', () => renderPatientListInDialog());
-            diseaseFilter.addEventListener('change', () => renderPatientListInDialog());
-            
+            patientSearchInput.addEventListener('input', renderPatientListInDialog);
+            freqFilter.addEventListener('change', renderPatientListInDialog);
+            diseaseFilter.addEventListener('change', renderPatientListInDialog);
             patientListContainer.addEventListener('click', e => {
                 const item = e.target.closest('.patient-list-item');
                 if (item) {
@@ -365,32 +331,9 @@
                     confirmBtn.disabled = false;
                 }
             });
-
-            confirmBtn.addEventListener('click', () => {
-                if (dialogState.selectedPatientId && dialogState.targetSlotId) {
-                    const patient = allOpdPatients.find(p => p.id === dialogState.selectedPatientId);
-                    const fillType = document.querySelector('input[name="fill-type"]:checked').value;
-                    const freq = patient.frequency;
-                    const [bed, shiftIndex] = dialogState.targetSlotId.split('-');
-
-                    if (fillType === 'frequency' && freq && FREQ_MAP_TO_DAY_INDEX[freq]) {
-                        const dayIndexes = FREQ_MAP_TO_DAY_INDEX[freq];
-                        dayIndexes.forEach(dayIndex => {
-                            const newSlotId = `${bed}-${shiftIndex}-${dayIndex}`;
-                            baseSchedule.set(newSlotId, dialogState.selectedPatientId);
-                        });
-                    } else {
-                        baseSchedule.set(dialogState.targetSlotId, dialogState.selectedPatientId);
-                    }
-                    
-                    setChange();
-                    populateScheduleData();
-                    dialog.close();
-                }
-            });
-
+            confirmBtn.addEventListener('click', handleAddSchedule);
             cancelBtn.addEventListener('click', () => dialog.close());
-            saveBtn.addEventListener('click', saveChanges);
+            document.getElementById('save-changes-btn').addEventListener('click', saveChanges);
         }
 
         function setupFilters() {
