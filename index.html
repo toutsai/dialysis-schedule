@@ -10,7 +10,7 @@
             padding: 0;
             height: 100%;
             font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
-            overflow: hidden; /* 防止滾動條出現在主頁面 */
+            overflow: hidden; 
         }
         .dashboard-container {
             display: flex;
@@ -78,69 +78,170 @@
                 管理平台
             </div>
             <ul class="sidebar-nav">
-                <!-- --- CHANGE START: Update default active tab --- -->
-                <li><a href="weekly_view.html" class="nav-link active" target="content-iframe">週排班總表</a></li>
-                <li><a href="schedule.html" class="nav-link" target="content-iframe">每日排程表</a></li>
+                <li><a href="schedule.html" class="nav-link active" target="content-iframe">每日排程表</a></li>
                 <li><a href="stats.html" class="nav-link" target="content-iframe">護理分組檢視</a></li>
                 <li><a href="patients.html" class="nav-link" target="content-iframe">病人管理系統</a></li>
-                <li><a href="base_schedule.html" class="nav-link" target="content-iframe">常規門診床位</a></li>
+                <li><a href="weekly_view.html" class="nav-link" target="content-iframe">週排班總表</a></li>
+                <li><a href="base_schedule.html" class="nav-link" target="content-iframe">常規門診設定</a></li>
                 <li><a href="memo.html" class="nav-link" target="content-iframe">交班備忘錄</a></li>
-                <!-- --- CHANGE END --- -->
             </ul>
         </aside>
         <main class="content-area">
-            <!-- --- CHANGE START: Update default iframe source --- -->
-            <iframe name="content-iframe" class="content-iframe" src="weekly_view.html"></iframe>
-            <!-- --- CHANGE END --- -->
+            <iframe name="content-iframe" class="content-iframe" src="schedule.html"></iframe>
         </main>
     </div>
 
+    <script src="api_manager.js"></script> 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
-            const iframe = document.querySelector('.content-iframe');
+    document.addEventListener('DOMContentLoaded', () => {
+        const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
+        const iframe = document.querySelector('.content-iframe');
 
-            // 讓子頁面可以呼叫這個函式來切換頁面
-            window.navigateTo = function(pageUrl) {
-                if (iframe.src !== pageUrl) {
-                    iframe.src = pageUrl;
+        const schedulesApi = ApiManager('schedules');
+        const BASE_SCHEDULE_API_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/dialysis_base_schedule/1';
+        const MEMOS_API_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/memos';
+
+        function getStartOfWeek(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(new Date(d.setDate(diff)).setHours(0, 0, 0, 0));
+        }
+
+        function formatDate(date) {
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        async function systemInitializer() {
+            console.log("系統初始化啟動...");
+            await preGenerateSchedules();
+            await showGlobalMemos();
+            console.log("系統初始化完成。");
+        }
+
+        async function preGenerateSchedules() {
+            console.log("開始檢查並預生成排班...");
+            try {
+                const baseRes = await fetch(BASE_SCHEDULE_API_URL);
+                if (!baseRes.ok) {
+                    console.log("未找到常規門診範本，不進行預生成。");
+                    return;
+                }
+                const baseData = await baseRes.json();
+                const baseSchedule = baseData.scheduleData;
+                if (!baseSchedule || Object.keys(baseSchedule).length === 0) {
+                    console.log("常規門診範本為空，不進行預生成。");
+                    return;
                 }
                 
-                // 更新側邊欄的 active 狀態
-                navLinks.forEach(link => {
-                    // 檢查連結的 href 是否與目標 URL 的路徑部分匹配
-                    const linkPath = new URL(link.href, window.location.origin).pathname;
-                    const targetPath = new URL(pageUrl, window.location.origin).pathname;
-
-                    if (linkPath === targetPath) {
-                        link.classList.add('active');
-                    } else {
-                        link.classList.remove('active');
+                const thisWeekStart = getStartOfWeek(new Date());
+                const nextWeekStart = new Date(thisWeekStart);
+                nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+                const weeksToProcess = [thisWeekStart, nextWeekStart];
+                
+                const datesToCheck = [];
+                weeksToProcess.forEach(weekStart => {
+                    for (let i = 0; i < 6; i++) { // Monday to Saturday
+                        const targetDate = new Date(weekStart);
+                        targetDate.setDate(weekStart.getDate() + i);
+                        datesToCheck.push(formatDate(targetDate));
                     }
                 });
-            };
 
-            // 處理側邊欄點擊事件
+                const existingSchedules = await schedulesApi.fetchAll();
+                const existingDates = new Set(existingSchedules.map(rec => rec.date));
+
+                const datesToCreate = datesToCheck.filter(date => !existingDates.has(date));
+
+                if (datesToCreate.length === 0) {
+                    console.log("本週與下週的排班皆已存在，無需生成。");
+                    return;
+                }
+
+                console.log(`準備為以下日期生成排班: ${datesToCreate.join(', ')}`);
+                
+                const scheduleTemplate = {};
+                Object.entries(baseSchedule).forEach(([slotId, patientId]) => {
+                    const [bed, shiftIndex] = slotId.split('-');
+                    const shiftName = Object.keys({ '早': 0, '午': 1, '晚': 2 })[shiftIndex];
+                    const dailyShiftId = `bed-${bed}-${shiftName}`;
+                    scheduleTemplate[dailyShiftId] = { patientId: patientId };
+                });
+
+                for (const dateStr of datesToCreate) {
+                    const newRecord = {
+                        date: dateStr,
+                        schedule: scheduleTemplate,
+                        names: {}
+                    };
+                    await schedulesApi.save(newRecord);
+                    console.log(`已成功生成 ${dateStr} 的排班記錄。`);
+                }
+
+            } catch (error) {
+                console.error("預生成排班時發生錯誤:", error);
+            }
+        }
+        
+        async function showGlobalMemos() {
+            console.log("正在檢查全域備忘...");
+            try {
+                const response = await fetch(`${MEMOS_API_URL}?isResolved=false`);
+                if (!response.ok) return;
+                const memos = await response.json();
+
+                const globalMemos = memos.filter(m => !m.patientName && !m.targetDate);
+                
+                if (globalMemos.length > 0) {
+                    let message = "【全域交班事項提醒】\n\n";
+                    globalMemos.forEach(memo => {
+                        message += `- ${memo.content}\n`;
+                    });
+                    setTimeout(() => alert(message), 500);
+                }
+            } catch (error) {
+                console.error("獲取全域備忘時發生錯誤:", error);
+            }
+        }
+
+        systemInitializer();
+
+        window.navigateTo = function(pageUrl) {
+            if (iframe.src !== pageUrl) {
+                iframe.src = pageUrl;
+            }
             navLinks.forEach(link => {
-                link.addEventListener('click', (e) => {
-                    // 更新 active 狀態
-                    navLinks.forEach(l => l.classList.remove('active'));
-                    e.currentTarget.classList.add('active');
-                });
+                const linkPath = new URL(link.href, window.location.origin).pathname;
+                const targetPath = new URL(pageUrl, window.location.origin).pathname;
+                if (linkPath === targetPath) {
+                    link.classList.add('active');
+                } else {
+                    link.classList.remove('active');
+                }
             });
+        };
 
-            // 監聽 iframe 載入完成事件，確保點擊連結後能正確更新 active 狀態
-             iframe.addEventListener('load', () => {
-                const currentIframeSrc = iframe.contentWindow.location.href;
-                navLinks.forEach(link => {
-                    if (link.href === currentIframeSrc) {
-                        link.classList.add('active');
-                    } else {
-                        link.classList.remove('active');
-                    }
-                });
+        navLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                navLinks.forEach(l => l.classList.remove('active'));
+                e.currentTarget.classList.add('active');
             });
         });
+
+        iframe.addEventListener('load', () => {
+            const currentIframeSrc = iframe.contentWindow.location.href;
+            navLinks.forEach(link => {
+                if (link.href === currentIframeSrc) {
+                    link.classList.add('active');
+                } else {
+                    link.classList.remove('active');
+                }
+            });
+        });
+    });
     </script>
 </body>
 </html>
