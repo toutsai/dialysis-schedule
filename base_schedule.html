@@ -3,11 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>常規門診病人床位表</title>
+    <title>常規門診病人床位表 (V1.1 - 完整修正版)</title>
     <style>
         :root {
             --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
             --border-color: #dee2e6; --sidebar-bg: #f8f9fa; --green-bg: #e8f5e9;
+            --hepatitis-bg: #fffde7; --hepatitis-border: #fff176;
+            --blue-bg: #e3f2fd;
         }
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
         .container { max-width: 1800px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
@@ -16,13 +18,15 @@
         .header button { padding: 10px 20px; font-size: 1.1em; border-radius: 5px; border: none; color: white; cursor: pointer; }
         #save-btn { background-color: var(--success-color); }
         #save-btn:disabled { background-color: #ccc; cursor: not-allowed; }
-        .status-indicator { font-weight: bold; }
+        .status-indicator { font-weight: bold; margin-right: 15px; }
         .status-indicator.loading { color: #ff9800; }
         .status-indicator.saved { color: #4CAF50; }
         .status-indicator.error { color: #f44336; }
+        .status-indicator.unsaved { color: #e74c3c; }
         .schedule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; }
         .bed-card { border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
         .bed-header { background-color: #e9ecef; padding: 8px; font-size: 1.2em; font-weight: bold; text-align: center; }
+        .bed-card.hepatitis .bed-header { background-color: var(--hepatitis-bg); border-bottom: 1px solid var(--hepatitis-border); }
         .shift-slot { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-top: 1px solid #f1f1f1; }
         .shift-label { font-weight: bold; color: #555; }
         .patient-cell { flex-grow: 1; text-align: center; padding: 8px; margin: 0 10px; border-radius: 5px; cursor: pointer; background-color: #f8f9fa; border: 1px dashed #ccc; }
@@ -31,15 +35,27 @@
         .action-btn { background: none; border: none; cursor: pointer; font-size: 1.2em; color: #888; }
         .action-btn:hover { color: var(--danger-color); }
         
-        dialog { border: 1px solid #ccc; border-radius: 8px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 90%; max-width: 500px; }
+        dialog { border: 1px solid #ccc; border-radius: 8px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 90%; max-width: 600px; }
         dialog::backdrop { background-color: rgba(0,0,0,0.5); }
         dialog h3 { margin-top: 0; }
-        #patient-list-container { max-height: 350px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; margin-top: 10px; }
-        .patient-list-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; }
+        .dialog-filters { display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap; }
+        .dialog-filters .filter-group { display: flex; flex-direction: column; }
+        .dialog-filters label { font-size: 0.9em; margin-bottom: 5px; color: #555; }
+        .dialog-filters input, .dialog-filters select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
+        #patient-list-container { max-height: 300px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; }
+        .patient-list-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+        .patient-list-item:last-child { border-bottom: none; }
         .patient-list-item:hover { background-color: #f0f0f0; }
         .patient-list-item.selected { background-color: var(--blue-bg); font-weight: bold; }
+        .patient-main-info { display: flex; flex-direction: column; }
+        .patient-name { font-size: 1.1em; }
+        .patient-mrn { font-size: 0.85em; color: #6c757d; }
+        .patient-meta { display: flex; align-items: center; gap: 8px; font-size: 0.9em; }
+        .disease-tag-small { display: inline-block; padding: 1px 5px; font-size: 0.8em; font-weight: bold; color: var(--danger-color); border: 1px solid var(--danger-color); border-radius: 4px; }
         .modal-footer { margin-top: 20px; text-align: right; }
         .modal-footer button { margin-left: 10px; }
+        .radio-group { display: flex; align-items: center; gap: 8px; }
+        .radio-group input { width: auto; }
     </style>
 </head>
 <body>
@@ -58,8 +74,32 @@
 
     <dialog id="patient-select-dialog">
         <h3 id="dialog-title">選擇門診病人</h3>
-        <input type="text" id="patient-search" placeholder="搜尋姓名或病歷號..." style="width: 100%; padding: 8px; box-sizing: border-box;">
+        <div class="dialog-filters">
+            <div class="filter-group">
+                <label for="patient-search">姓名/病歷號</label>
+                <input type="text" id="patient-search" placeholder="搜尋...">
+            </div>
+            <div class="filter-group">
+                <label for="freq-filter">頻率</label>
+                <select id="freq-filter"><option value="">全部頻率</option></select>
+            </div>
+            <div class="filter-group">
+                <label for="disease-filter">須注意疾病</label>
+                <select id="disease-filter"><option value="">全部</option></select>
+            </div>
+        </div>
         <div id="patient-list-container"></div>
+        <div class="form-field" style="margin-top: 15px;">
+            <label>填入方式：</label>
+            <div class="radio-group">
+                <input type="radio" id="fill-by-freq" name="fill-type" value="frequency" checked>
+                <label for="fill-by-freq">依病人預設頻率填入</label>
+            </div>
+            <div class="radio-group">
+                <input type="radio" id="fill-single" name="fill-type" value="single">
+                <label for="fill-single">僅排入此班次</label>
+            </div>
+        </div>
         <div class="modal-footer">
             <button id="dialog-cancel-btn" value="cancel">取消</button>
             <button id="dialog-confirm-btn" disabled>確認</button>
@@ -70,20 +110,20 @@
     <script>
     document.addEventListener('DOMContentLoaded', () => {
         const patientsApi = ApiManager('patients');
-        // --- CHANGE START: Define a new API endpoint for the base schedule ---
         const BASE_SCHEDULE_API_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/dialysis_base_schedule';
-        const BASE_SCHEDULE_RECORD_ID = '1'; // We will always use the record with id=1
-        // --- CHANGE END ---
+        const BASE_SCHEDULE_RECORD_ID = '1';
 
         const SHIFTS = ['早班', '午班', '晚班'];
         const bedLayout = [ 1,2,3,5,6,7,8,9,11,12,13,15,16,17,18,19,21,22,23,25,26,27,28,29, 31,32,33,35,36,37,38,39,51,52,53,55,56,57,58,59,61,62,63,65 ].sort((a, b) => a - b);
-        
+        const hepatitisBeds = [31, 32, 33, 35, 36];
+        const FREQUENCIES = ['一三五', '二四六', '一四', '二五', '三六', '一五', '二六', '每周一次', '臨時'];
+        const DISEASES = ['HIV', 'RPR', 'HBV', 'HCV', '隔離'];
+        const FREQ_MAP_TO_DAY_INDEX = { '一三五': [0, 2, 4], '二四六': [1, 3, 5], '一四': [0, 3], '二五': [1, 4], '三六': [2, 5], '一五': [0, 4], '二六': [1, 5] };
+
         let allOpdPatients = [];
-        let baseSchedule = {}; // { "slotId": "patientId", ... }
-        let dialogState = {
-            targetSlotId: null,
-            selectedPatientId: null,
-        };
+        let baseSchedule = {};
+        let hasUnsavedChanges = false;
+        let dialogState = { targetSlotId: null, selectedPatientId: null };
 
         const grid = document.getElementById('schedule-grid');
         const saveBtn = document.getElementById('save-btn');
@@ -91,6 +131,8 @@
         const dialog = document.getElementById('patient-select-dialog');
         const dialogTitle = document.getElementById('dialog-title');
         const patientSearchInput = document.getElementById('patient-search');
+        const freqFilter = document.getElementById('freq-filter');
+        const diseaseFilter = document.getElementById('disease-filter');
         const patientListContainer = document.getElementById('patient-list-container');
         const dialogConfirmBtn = document.getElementById('dialog-confirm-btn');
         const dialogCancelBtn = document.getElementById('dialog-cancel-btn');
@@ -98,6 +140,12 @@
         function setStatus(message, type) {
             statusIndicator.textContent = message;
             statusIndicator.className = `status-indicator ${type}`;
+            saveBtn.disabled = !hasUnsavedChanges;
+        }
+        
+        function setChange() {
+            hasUnsavedChanges = true;
+            setStatus('有未儲存的變更', 'unsaved');
         }
 
         function generateLayout() {
@@ -105,6 +153,9 @@
             bedLayout.forEach(bedNum => {
                 const card = document.createElement('div');
                 card.className = 'bed-card';
+                if (hepatitisBeds.includes(bedNum)) {
+                    card.classList.add('hepatitis');
+                }
                 let shiftsHtml = '';
                 SHIFTS.forEach((shift, shiftIndex) => {
                     const slotId = `${bedNum}-${shiftIndex}`;
@@ -116,10 +167,7 @@
                         </div>
                     `;
                 });
-                card.innerHTML = `
-                    <div class="bed-header">床號 ${bedNum}</div>
-                    ${shiftsHtml}
-                `;
+                card.innerHTML = `<div class="bed-header">床號 ${bedNum}</div>${shiftsHtml}`;
                 grid.appendChild(card);
             });
         }
@@ -138,7 +186,7 @@
                         patientCell.classList.add('filled');
                         clearBtn.style.visibility = 'visible';
                     } else {
-                        patientCell.textContent = `[病人ID:${patientId}不存在]`;
+                        patientCell.textContent = `[病人ID不存在]`;
                         patientCell.classList.add('filled');
                         patientCell.style.color = 'red';
                         clearBtn.style.visibility = 'visible';
@@ -157,12 +205,13 @@
             try {
                 const [patients, baseScheduleRes] = await Promise.all([
                     patientsApi.fetchAll(),
-                    fetch(`${BASE_SCHEDULE_API_URL}/${BASE_SCHEDULE_RECORD_ID}`).then(res => res.ok ? res.json() : null)
+                    fetch(`${BASE_SCHEDULE_API_URL}`).then(res => res.ok ? res.json() : Promise.resolve([]))
                 ]);
 
                 allOpdPatients = patients.filter(p => p.status === 'opd' && !p.isDeleted);
-                if (baseScheduleRes) {
-                    baseSchedule = baseScheduleRes.scheduleData || {};
+                if (baseScheduleRes && baseScheduleRes.length > 0) {
+                    // Assuming the first record is the one we use
+                    baseSchedule = baseScheduleRes[0].scheduleData || {};
                 }
                 
                 populateSchedule();
@@ -184,7 +233,6 @@
                     body: JSON.stringify({ scheduleData: baseSchedule })
                 });
                 if (!response.ok) {
-                    // If record doesn't exist, try to create it
                     if (response.status === 404) {
                         const createResponse = await fetch(BASE_SCHEDULE_API_URL, {
                             method: 'POST',
@@ -196,11 +244,13 @@
                         throw new Error(`儲存失敗，狀態碼: ${response.status}`);
                     }
                 }
+                hasUnsavedChanges = false;
                 setStatus('儲存成功！', 'saved');
             } catch (error) {
                 console.error("儲存失敗:", error);
                 setStatus('儲存失敗', 'error');
                 alert(`儲存失敗: ${error.message}`);
+                saveBtn.disabled = false;
             }
         }
         
@@ -209,6 +259,8 @@
             dialogState.selectedPatientId = null;
             dialogConfirmBtn.disabled = true;
             patientSearchInput.value = '';
+            freqFilter.value = '';
+            diseaseFilter.value = '';
             
             const [bed, shift] = slotId.split('-');
             dialogTitle.textContent = `為 床號 ${bed} - ${SHIFTS[shift]} 選擇病人`;
@@ -217,11 +269,17 @@
             dialog.showModal();
         }
 
-        function renderPatientListInDialog(searchTerm = '') {
-            const term = searchTerm.toLowerCase();
-            const patientsToShow = allOpdPatients.filter(p => 
-                !term || p.name.toLowerCase().includes(term) || (p.medicalRecordNumber && p.medicalRecordNumber.includes(term))
-            );
+        function renderPatientListInDialog() {
+            const searchTerm = patientSearchInput.value.toLowerCase();
+            const selectedFreq = freqFilter.value;
+            const selectedDisease = diseaseFilter.value;
+
+            const patientsToShow = allOpdPatients.filter(p => {
+                const matchesSearch = !searchTerm || (p.name && p.name.toLowerCase().includes(searchTerm)) || (p.medicalRecordNumber && p.medicalRecordNumber.includes(searchTerm));
+                const matchesFreq = !selectedFreq || p.frequency === selectedFreq;
+                const matchesDisease = !selectedDisease || (p.diseases && p.diseases.includes(selectedDisease));
+                return matchesSearch && matchesFreq && matchesDisease;
+            });
             
             if (patientsToShow.length === 0) {
                 patientListContainer.innerHTML = `<div style="padding: 20px; text-align:center; color: #888;">無符合條件的門診病人</div>`;
@@ -230,12 +288,18 @@
 
             patientListContainer.innerHTML = patientsToShow.map(p => `
                 <div class="patient-list-item" data-patient-id="${p.id}">
-                    <span>${p.name} (${p.medicalRecordNumber || 'N/A'})</span>
-                    <span>${p.frequency || ''}</span>
+                    <div class="patient-main-info">
+                        <span class="patient-name">${p.name}</span>
+                        <span class="patient-mrn">(${p.medicalRecordNumber || 'N/A'})</span>
+                    </div>
+                    <div class="patient-meta">
+                        ${(p.diseases || []).map(d => `<span class="disease-tag-small">${d}</span>`).join(' ')}
+                        <span>${p.frequency || '未設定'}</span>
+                    </div>
                 </div>
             `).join('');
         }
-
+        
         function handleGridClick(e) {
             const target = e.target;
             const slot = target.closest('.shift-slot');
@@ -245,50 +309,83 @@
             const action = target.dataset.action;
 
             if (action === 'select-patient') {
-                openPatientDialog(slotId);
-            } else if (action === 'clear-patient') {
-                if (confirm('確定要從常規表中移除這位病人嗎？')) {
-                    delete baseSchedule[slotId];
-                    populateSchedule();
-                    saveBtn.disabled = false;
-                    setStatus('有未儲存的變更', 'unsaved');
+                if (target.classList.contains('filled')) {
+                    const patientId = baseSchedule[slotId];
+                    const choice = prompt(`此床位已安排病人。\n請輸入 1 清除此班次，或輸入 2 清除此病人在本表的所有排班。\n(按取消以離開)`);
+                    if (choice === '1') {
+                        delete baseSchedule[slotId];
+                        setChange();
+                        populateSchedule();
+                    } else if (choice === '2') {
+                        Object.keys(baseSchedule).forEach(key => {
+                            if (baseSchedule[key] === patientId) {
+                                delete baseSchedule[key];
+                            }
+                        });
+                        setChange();
+                        populateSchedule();
+                    }
+                } else {
+                    openPatientDialog(slotId);
                 }
+            } else if (action === 'clear-patient') {
+                delete baseSchedule[slotId];
+                setChange();
+                populateSchedule();
             }
         }
         
-        // --- Initialize ---
+        function setupFilters() {
+            freqFilter.innerHTML = '<option value="">全部頻率</option>' + FREQUENCIES.map(f => `<option value="${f}">${f}</option>`).join('');
+            diseaseFilter.innerHTML = '<option value="">全部疾病</option>' + DISEASES.map(d => `<option value="${d}">${d}</option>`).join('');
+        }
+
+        function setupEventListeners() {
+            grid.addEventListener('click', handleGridClick);
+            patientSearchInput.addEventListener('input', () => renderPatientListInDialog());
+            freqFilter.addEventListener('change', () => renderPatientListInDialog());
+            diseaseFilter.addEventListener('change', () => renderPatientListInDialog());
+            patientListContainer.addEventListener('click', e => {
+                const item = e.target.closest('.patient-list-item');
+                if (item) {
+                    const previouslySelected = patientListContainer.querySelector('.selected');
+                    if (previouslySelected) previouslySelected.classList.remove('selected');
+                    item.classList.add('selected');
+                    dialogState.selectedPatientId = item.dataset.patientId;
+                    dialogConfirmBtn.disabled = false;
+                }
+            });
+            dialogConfirmBtn.addEventListener('click', () => {
+                if (dialogState.selectedPatientId && dialogState.targetSlotId) {
+                    const patient = allOpdPatients.find(p => p.id === dialogState.selectedPatientId);
+                    const fillType = document.querySelector('input[name="fill-type"]:checked').value;
+                    const freq = patient.frequency;
+                    const [bed, shiftIndex] = dialogState.targetSlotId.split('-');
+
+                    if (fillType === 'frequency' && freq && FREQ_MAP_TO_DAY_INDEX[freq]) {
+                        const dayIndexes = FREQ_MAP_TO_DAY_INDEX[freq];
+                        dayIndexes.forEach(dayIndex => {
+                            const newSlotId = `${bed}-${shiftIndex}-${dayIndex}`;
+                            baseSchedule[newSlotId] = dialogState.selectedPatientId;
+                        });
+                    } else {
+                        baseSchedule[dialogState.targetSlotId] = dialogState.selectedPatientId;
+                    }
+                    
+                    setChange();
+                    populateSchedule();
+                    dialog.close();
+                }
+            });
+            dialogCancelBtn.addEventListener('click', () => dialog.close());
+            saveBtn.addEventListener('click', saveChanges);
+        }
+
+        // --- Initializer ---
         generateLayout();
+        setupFilters();
         loadAllData();
-
-        // --- Event Listeners ---
-        grid.addEventListener('click', handleGridClick);
-
-        patientListContainer.addEventListener('click', e => {
-            const item = e.target.closest('.patient-list-item');
-            if (item) {
-                const previouslySelected = patientListContainer.querySelector('.selected');
-                if (previouslySelected) previouslySelected.classList.remove('selected');
-                item.classList.add('selected');
-                dialogState.selectedPatientId = item.dataset.patientId;
-                dialogConfirmBtn.disabled = false;
-            }
-        });
-
-        patientSearchInput.addEventListener('input', () => renderPatientListInDialog(patientSearchInput.value));
-
-        dialogConfirmBtn.addEventListener('click', () => {
-            if (dialogState.selectedPatientId && dialogState.targetSlotId) {
-                baseSchedule[dialogState.targetSlotId] = dialogState.selectedPatientId;
-                populateSchedule();
-                saveBtn.disabled = false;
-                setStatus('有未儲存的變更', 'unsaved');
-                dialog.close();
-            }
-        });
-
-        dialogCancelBtn.addEventListener('click', () => dialog.close());
-        saveBtn.addEventListener('click', saveChanges);
-
+        setupEventListeners();
     });
     </script>
 </body>
