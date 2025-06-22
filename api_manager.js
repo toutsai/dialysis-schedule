@@ -22,8 +22,9 @@ const API_ENDPOINTS = {
         'https://6852ef850594059b23cfaa4f.mockapi.io/schedules7',
         'https://6852ef850594059b23cfaa4f.mockapi.io/schedules8',
         'https://6852ef850594059b23cfaa4f.mockapi.io/schedules9',
-        'https://6852ef850594059b23cfaa4f.mockapi.io/schedules10',
+        'https://6852ef850594059b23cfaa4f.mockapi.io/schedules10'
     ],
+    // weekly_schedule is no longer needed in the new architecture
 };
 
 const ApiManager = (resourceType) => {
@@ -32,46 +33,49 @@ const ApiManager = (resourceType) => {
         throw new Error(`未知的資源類型: ${resourceType}`);
     }
 
-    // --- CHANGE START: More robust fetchAll logic ---
-    const fetchAll = async (query = '') => {
-        const requests = endpoints.map(url => 
-            fetch(`${url}${query}`)
-                .then(response => {
-                    // If response is successful (200-299), parse it as JSON.
-                    // If it's a 404, it's not a critical error, just means no data, so we treat it as an empty array.
-                    if (response.ok) {
-                        return response.json();
-                    }
-                    if (response.status === 404) {
-                        return []; // Gracefully handle "Not Found" as an empty result.
-                    }
-                    // For other errors (like 500, 429), throw an error to be caught by the outer catch block.
-                    throw new Error(`伺服器錯誤: ${response.status}`);
-                })
-        );
+    // Helper function to add a small delay
+    const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-        const results = await Promise.allSettled(requests);
-        let allData = [];
-        results.forEach((result, index) => {
-            if (result.status === 'fulfilled' && Array.isArray(result.value)) {
-                const dataWithSource = result.value.map(item => ({
-                    ...item,
-                    _sourceEndpoint: endpoints[index] 
-                }));
-                allData = allData.concat(dataWithSource);
-            } else if (result.status === 'rejected') {
-                // Log errors from individual endpoints but don't stop the entire process
-                console.error(`讀取端點 ${endpoints[index]} 失敗:`, result.reason);
+    const fetchAll = async (query = '') => {
+        const allData = [];
+        for (let i = 0; i < endpoints.length; i++) {
+            const url = endpoints[i];
+            try {
+                const response = await fetch(`${url}${query}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (Array.isArray(data)) {
+                        const dataWithSource = data.map(item => ({
+                            ...item,
+                            _sourceEndpoint: url
+                        }));
+                        allData.push(...dataWithSource);
+                    }
+                } else if (response.status !== 404) {
+                    console.warn(`讀取端點 ${url} 時伺服器錯誤: ${response.status}`);
+                }
+                // If status is 404, we just get nothing, which is fine.
+            } catch (error) {
+                console.error(`讀取端點 ${url} 失敗:`, error);
             }
-        });
+            // Add a small delay between requests to avoid rate limiting
+            await delay(50); 
+        }
         return allData;
     };
-    // --- CHANGE END ---
 
     const save = async (data) => {
-        const counts = await Promise.all(
-            endpoints.map(url => fetch(url).then(res => res.ok ? res.json() : []).then(d => d.length).catch(() => 100))
-        );
+        const counts = [];
+        for (const url of endpoints) {
+            try {
+                const res = await fetch(url);
+                const d = res.ok ? await res.json() : [];
+                counts.push(d.length);
+            } catch (e) {
+                counts.push(100); // Assume full on error
+            }
+            await delay(50);
+        }
 
         let targetEndpoint = null;
         for (let i = 0; i < counts.length; i++) {
@@ -83,19 +87,19 @@ const ApiManager = (resourceType) => {
         
         if (!targetEndpoint) {
             const allData = await fetchAll();
-            const deletedPatients = allData.filter(p => p.isDeleted === true);
+            const deletedItems = allData.filter(p => p.isDeleted === true || p.status === 'deleted'); // Generalize for patients and other types
             
-            if (deletedPatients.length > 0) {
-                if (!confirm("所有儲存空間已滿！將覆蓋一筆最舊的【已刪除病人】記錄來儲存新資料。是否繼續？")) {
+            if (deletedItems.length > 0) {
+                if (!confirm("所有儲存空間已滿！將覆蓋一筆最舊的【已刪除項目】來儲存新資料。是否繼續？")) {
                     throw new Error("操作已取消：儲存空間已滿。");
                 }
-                const oldestDeletedRecord = deletedPatients.reduce((oldest, current) => 
-                    new Date(oldest.deletedAt) < new Date(current.deletedAt) ? oldest : current
+                const oldestRecord = deletedItems.reduce((oldest, current) => 
+                    new Date(oldest.deletedAt || oldest.createdAt) < new Date(current.deletedAt || current.createdAt) ? oldest : current
                 );
-                await remove(oldestDeletedRecord.id, oldestDeletedRecord._sourceEndpoint);
-                targetEndpoint = oldestDeletedRecord._sourceEndpoint;
+                await remove(oldestRecord.id, oldestRecord._sourceEndpoint);
+                targetEndpoint = oldestRecord._sourceEndpoint;
             } else {
-                alert("警告：所有儲存空間已滿，且沒有可覆蓋的【已刪除病人】！請手動清理空間或聯繫管理員。");
+                alert("警告：所有儲存空間已滿，且沒有可覆蓋的【已刪除項目】！請手動清理空間或聯繫管理員。");
                 throw new Error("儲存失敗：空間已滿且無可覆蓋項目。");
             }
         }
