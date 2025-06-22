@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>護理師組別統計報表 (V24.0 - 環形儲存整合)</title>
+    <title>護理師組別統計報表 (V25.1 - 完整修正版)</title>
     <style>
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; padding: 20px; background-color: #f9f9f9; }
         .top-bar { display: flex; justify-content: space-between; align-items: center; max-width: 100%; margin: 0 auto 20px; }
@@ -12,8 +12,8 @@
         .date-nav-btn { font-size: 1.5em; padding: 0 10px; visibility: visible; }
         .controls { text-align: center; margin-bottom: 20px; display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; }
         .controls button { padding: 10px 20px; font-size: 1.1em; cursor: pointer; border-radius: 5px; border: 1px solid #ccc; }
-        #save-names-btn { background-color: #4CAF50; color: white; border-color: #4CAF50;}
-        #clear-names-btn { background-color: #f44336; color: white; border-color: #f44336; }
+        #save-changes-btn { background-color: #4CAF50; color: white; border-color: #4CAF50;}
+        #save-changes-btn:disabled { background-color: #ccc; border-color: #ccc; cursor: not-allowed; }
         .status-indicator { font-size: 0.9em; font-weight: bold; color: #757575; align-self: center; }
         .table-container { background-color: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .stats-section { margin-bottom: 30px; }
@@ -25,14 +25,23 @@
         .team-name-cell { padding: 0 !important; }
         .name-select { width: 100%; height: 100%; border: none; background-color: #fffde7; text-align: center; font-size: 1em; cursor: pointer; }
         .name-select:focus { outline: 2px solid #fbc02d; }
-        .patient-list-cell { text-align: left; vertical-align: top; white-space: pre-wrap; min-height: 50px; }
-        .patient-list-cell span { display: block; padding: 2px 4px; margin-bottom: 2px; border-radius: 3px; }
-        .patient-list-cell .tag-chou { background-color: #90caf9 !important; }
-        .patient-list-cell .hospitalized { background-color: #ffcdd2 !important; }
-        .patient-list-cell .tag-huan { background-color: #e3f2fd !important; }
-        .patient-list-cell .tag-liang { background-color: #ffcc80 !important; }
-        .patient-list-cell .tag-b { background-color: #ffe0b2 !important; }
-        @media print { body { padding: 10px; background-color: #fff; font-size: 8pt; } .controls, h1, .top-bar, .status-indicator { display: none; } .container { max-width: 100%; } .table-container { box-shadow: none; } .name-select { -webkit-appearance: none; -moz-appearance: none; appearance: none; background-color: transparent; } .patient-list-cell span { background-color: inherit !important; -webkit-print-color-adjust: exact; color-adjust: exact; } }
+        .patient-list-cell { text-align: left; vertical-align: top; white-space: pre-wrap; min-height: 80px; }
+        .patient-item { display: block; padding: 4px; margin-bottom: 4px; border-radius: 4px; border: 1px solid #ddd; cursor: grab; background-color: #fff; }
+        .patient-item:active { cursor: grabbing; background-color: #e0e0e0; }
+        .patient-list-cell.drag-over { background-color: #e8f5e9; }
+        .patient-item.tag-chou { background-color: #90caf9 !important; }
+        .patient-item.hospitalized { background-color: #ffcdd2 !important; }
+        .patient-item.tag-huan { background-color: #e3f2fd !important; }
+        .patient-item.tag-liang { background-color: #ffcc80 !important; }
+        .patient-item.tag-b { background-color: #ffe0b2 !important; }
+        .patient-item.has-memo { outline: 2px solid #dc3545; }
+        @media print { 
+            body { padding: 10px; background-color: #fff; font-size: 8pt; } 
+            .controls, h1, .top-bar, .status-indicator { display: none; } 
+            .container { max-width: 100%; } .table-container { box-shadow: none; } 
+            .name-select { -webkit-appearance: none; -moz-appearance: none; appearance: none; background-color: transparent; } 
+            .patient-list-cell span, .patient-item { background-color: inherit !important; -webkit-print-color-adjust: exact; color-adjust: exact; } 
+        }
     </style>
 </head>
 <body>
@@ -46,8 +55,7 @@
     </div>
     <div class="container">
         <div class="controls">
-            <button id="save-names-btn">儲存姓名資料至雲端</button>
-            <button id="clear-names-btn">清空護理師姓名</button>
+            <button id="save-changes-btn" disabled>儲存變更</button>
             <button onclick="window.print()">列印報表</button>
             <div id="status-indicator" class="status-indicator"></div>
         </div>
@@ -69,21 +77,23 @@
     document.addEventListener('DOMContentLoaded', () => {
         const schedulesApi = ApiManager('schedules');
         const patientsApi = ApiManager('patients');
+        const MEMOS_API_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/memos';
         
         let currentDate = new Date();
         let currentRecord = null;
         let allPatients = [];
+        let allMemos = [];
+        let hasUnsavedChanges = false;
 
         const statusIndicator = document.getElementById('status-indicator');
         const dateDisplay = document.getElementById('current-date-display');
         const earlyTable = document.getElementById('early-shift-table');
         const lateTable = document.getElementById('late-shift-table');
-        const saveNamesBtn = document.getElementById('save-names-btn');
-        const clearNamesBtn = document.getElementById('clear-names-btn');
+        const saveBtn = document.getElementById('save-changes-btn');
 
-        const baseTeams = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', '外圍'];
         const nurseNameList = [ "陳素秋", "古孟麗", "謝常菁", "林玉麗", "陳聖柔", "田姿瑛", "陳韋吟", "劉姿秀", "劉舒婷", "李慈賢", "黃羿寧", "高佩鳳", "林沛儀", "李汶娟", "陳芃諭", "葛孟萍", "蘇愛玲", "郭芳君", "林馨如", "賴秋妏", "胡國暄", "施艾利", "陳淑玲", "謝慶諭", "林佩佳", "吳思婷", "曾佩君", "吳幸美" ];
         const nurseOptionsHTML = `<option value=""></option>` + nurseNameList.map(name => `<option value="${name}">${name}</option>`).join('');
+        const baseTeams = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', '外圍'];
         
         const formatDate = (date) => {
             const year = date.getFullYear();
@@ -91,177 +101,210 @@
             const day = date.getDate().toString().padStart(2, '0');
             return `${year}-${month}-${day}`;
         };
-        const setStatus = (message) => { statusIndicator.textContent = message; };
+        const setStatus = (message, type) => {
+            statusIndicator.textContent = message;
+            statusIndicator.className = `status-indicator ${type}`;
+        };
 
-        async function loadStatsFromCloud(dateStr) {
-            earlyTable.innerHTML = '';
-            lateTable.innerHTML = '';
+        function setChange() {
+            hasUnsavedChanges = true;
+            saveBtn.disabled = false;
+            setStatus('有未儲存的變更', 'unsaved');
+        }
+
+        async function loadData(dateStr) {
+            hasUnsavedChanges = false;
+            saveBtn.disabled = true;
+            earlyTable.innerHTML = '<tr><td>讀取中...</td></tr>';
+            lateTable.innerHTML = '<tr><td>讀取中...</td></tr>';
             currentRecord = null;
-            setStatus('讀取中...');
+            setStatus('讀取中...', 'loading');
             
             try {
-                const [dailyRecords, patientsData] = await Promise.all([
+                const [dailyRecords, patientsData, memosData] = await Promise.all([
                     schedulesApi.fetchAll(`?date=${dateStr}`),
-                    patientsApi.fetchAll()
+                    patientsApi.fetchAll(),
+                    fetch(`${MEMOS_API_URL}?isResolved=false`).then(res => res.ok ? res.json() : [])
                 ]);
 
                 allPatients = patientsData;
+                allMemos = memosData;
 
                 if (dailyRecords.length > 0) {
                     currentRecord = dailyRecords[0];
-                    loadReportData(currentRecord);
+                    renderReport(currentRecord);
                     setStatus('資料已載入');
                 } else {
                     dateDisplay.textContent = `${dateStr} 無排程資料`;
+                    earlyTable.innerHTML = '';
+                    lateTable.innerHTML = '';
                     setStatus('本日無資料');
                 }
             } catch (error) {
                 console.error('讀取報表資料失敗:', error);
-                setStatus('讀取失敗');
+                setStatus('讀取失敗', 'error');
             }
         }
 
-        async function saveNamesToCloud(namesObject) {
-            if (!currentRecord) { alert("目前日期沒有排程資料，無法儲存。"); return; }
-            
-            const dataToUpdate = { ...currentRecord, names: namesObject };
-            
-            setStatus('儲存中...', 'loading');
-            try {
-                await schedulesApi.update(currentRecord.id, dataToUpdate);
-                currentRecord.names = namesObject;
-
-                const action = Object.keys(namesObject).length > 0 ? '儲存' : '清空';
-                setStatus(`姓名資料已於 ${new Date().toLocaleTimeString()} ${action}成功`);
-                alert(`護理師姓名資料已成功${action}！`);
-            } catch (error) {
-                console.error('儲存姓名失敗:', error);
-                setStatus('儲存失敗');
-            }
-        }
-        
-        function loadReportData(fullData) {
+        function renderReport(fullData) {
             const { schedule, names } = fullData;
             if (!schedule) {
                 console.warn("記錄中缺少 schedule 物件");
+                earlyTable.innerHTML = '<tr><td>排程資料格式錯誤</td></tr>';
+                lateTable.innerHTML = '<tr><td>排程資料格式錯誤</td></tr>';
                 return;
             }
             const statsData = {};
             const allNurseTeams = [...baseTeams.map(t => `早${t}`), ...baseTeams.map(t => `晚${t}`)];
-            allNurseTeams.forEach(team => { statsData[team] = { early: [], noon_in: [], noon_out: [], late: [] }; });
-            
-            Object.keys(schedule).forEach(id => {
-                const shiftData = schedule[id];
-                const patientName = shiftData.patient;
-                if (!patientName) return;
-                
-                let bedNumberDisplay = id.startsWith('peripheral-') ? (shiftData.bedNumber || '?') : id.split('-')[1];
-                const tag = shiftData.tag ? ` (${shiftData.tag})` : '';
-                const patientInfo = `${bedNumberDisplay} - ${patientName}${tag}`;
-                
-                if (id.includes('-早')) { 
-                    if (shiftData.nurse && statsData[shiftData.nurse]) statsData[shiftData.nurse].early.push(patientInfo); 
-                } else if (id.includes('-晚')) { 
-                    if (shiftData.nurse && statsData[shiftData.nurse]) statsData[shiftData.nurse].late.push(patientInfo); 
-                } else if (id.includes('-午')) {
-                    if (shiftData.nurse_in && statsData[shiftData.nurse_in]) statsData[shiftData.nurse_in].noon_in.push(patientInfo);
-                    if (shiftData.nurse_out && statsData[shiftData.nurse_out]) statsData[shiftData.nurse_out].noon_out.push(patientInfo);
-                    if (shiftData.nurse && statsData[shiftData.nurse]) {
-                        statsData[shiftData.nurse].noon_in.push(patientInfo);
-                        statsData[shiftData.nurse].noon_out.push(patientInfo);
+            allNurseTeams.forEach(team => { statsData[team] = { patientIds: new Set(), shiftIdMap: {} }; });
+
+            Object.entries(schedule).forEach(([shiftId, shiftDetails]) => {
+                const { patientId, nurse, nurse_in, nurse_out } = shiftDetails;
+                if (!patientId) return;
+
+                const teams = new Set([nurse, nurse_in, nurse_out].filter(Boolean));
+                teams.forEach(team => {
+                    if (statsData[team]) {
+                        statsData[team].patientIds.add(patientId);
+                        statsData[team].shiftIdMap[patientId] = shiftId;
                     }
-                }
+                });
             });
-            generateEarlyShiftTable(earlyTable, '早', statsData, names || {});
-            generateLateShiftTable(lateTable, '晚', statsData, names || {});
+
+            generateTable(earlyTable, '早', statsData, names || {});
+            generateTable(lateTable, '晚', statsData, names || {});
+            setupDragAndDrop();
         }
 
-        const formatPatientListWithColor = (patientInfoArray) => {
-            return patientInfoArray.map(pInfo => {
-                const nameMatch = pInfo.match(/ - (.*?)(?:\s\(|$)/);
-                if (!nameMatch) return `<span>${pInfo}</span>`;
-
-                const patientName = nameMatch[1];
-                const patient = allPatients.find(p => p.name === patientName);
+        function generateTable(tableElement, shiftPrefix, statsData, statsNames) {
+            tableElement.innerHTML = '';
+            const headerRow = document.createElement('tr');
+            headerRow.className = 'team-header-row';
+            headerRow.innerHTML = `<th class="row-header"></th>`;
+            const nameRow = document.createElement('tr');
+            nameRow.innerHTML = `<th class="row-header">姓名</th>`;
+            const patientsRow = document.createElement('tr');
+            patientsRow.innerHTML = `<th class="row-header">病人列表</th>`;
+            
+            baseTeams.forEach(team => {
+                const fullTeamName = `${shiftPrefix}${team}`;
+                headerRow.innerHTML += `<td>${fullTeamName}組</td>`;
+                nameRow.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${fullTeamName}">${nurseOptionsHTML}</select></td>`;
                 
-                let className = '';
-                const tagText = pInfo.toUpperCase();
+                const teamData = statsData[fullTeamName] || { patientIds: new Set(), shiftIdMap: {} };
+                const patientHtml = Array.from(teamData.patientIds).map(patientId => {
+                    const patient = allPatients.find(p => p.id === patientId);
+                    if (!patient) return '';
+                    const shiftId = teamData.shiftIdMap[patientId];
+                    const shiftDetails = currentRecord.schedule[shiftId];
+                    const tag = shiftDetails?.tag ? ` (${shiftDetails.tag})` : '';
+                    
+                    const hasMemo = allMemos.some(m => m.patientName === patient.name);
+                    let classes = 'patient-item';
+                    if (patient.status === 'ipd' || tag.includes('住')) classes += ' hospitalized';
+                    if (tag.includes('抽')) classes += ' tag-chou';
+                    if (hasMemo) classes += ' has-memo';
 
-                if (tagText.includes('(抽)')) className = 'tag-chou';
-                else if (tagText.includes('(換)')) className = 'tag-huan';
-                else if (tagText.includes('(兩)')) className = 'tag-liang';
-                else if (tagText.includes('(B)')) className = 'tag-b';
-                else if (patient && patient.status === 'ipd') className = 'hospitalized';
-                
-                return className ? `<span class="${className}">${pInfo}</span>` : `<span>${pInfo}</span>`;
-            }).join('');
-        };
+                    return `<span class="${classes}" draggable="true" data-patient-id="${patientId}" data-shift-id="${shiftId}" title="${patient.name}${tag}">
+                        ${patient.name}${tag}
+                    </span>`;
+                }).join('');
+
+                patientsRow.innerHTML += `<td class="patient-list-cell" data-team-id="${fullTeamName}" data-shift-prefix="${shiftPrefix}">${patientHtml}</td>`;
+            });
+            
+            tableElement.append(headerRow, nameRow, patientsRow);
+            tableElement.querySelectorAll('.name-select').forEach(s => {
+                if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId];
+                s.addEventListener('change', setChange);
+            });
+        }
         
-        const generateEarlyShiftTable = (tableElement, shiftPrefix, statsData, statsNames) => {
-            tableElement.innerHTML = '';
-            const headerRow = document.createElement('tr');
-            headerRow.className = 'team-header-row';
-            headerRow.innerHTML = `<th class="row-header"></th>`;
-            const nameRow = document.createElement('tr');
-            nameRow.innerHTML = `<th class="row-header">姓名</th>`;
-            const earlyPatientsRow = document.createElement('tr');
-            earlyPatientsRow.innerHTML = `<th class="row-header">早班</th>`;
-            const noonInPatientsRow = document.createElement('tr');
-            noonInPatientsRow.innerHTML = `<th class="row-header">午班(上針)</th>`;
-            const noonOutPatientsRow = document.createElement('tr');
-            noonOutPatientsRow.innerHTML = `<th class="row-header">午班(收針)</th>`;
+        function setupDragAndDrop() {
+            const patientItems = document.querySelectorAll('.patient-item');
+            const patientCells = document.querySelectorAll('.patient-list-cell');
+            let draggedItem = null;
 
-            baseTeams.forEach(team => {
-                const fullTeamName = `${shiftPrefix}${team}`;
-                const teamData = statsData[fullTeamName] || { early: [], noon_in: [], noon_out: [] };
-                headerRow.innerHTML += `<td>${fullTeamName}組</td>`;
-                nameRow.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${fullTeamName}">${nurseOptionsHTML}</select></td>`;
-                earlyPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.early)}</td>`;
-                noonInPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.noon_in)}</td>`;
-                noonOutPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.noon_out)}</td>`;
+            patientItems.forEach(item => {
+                item.addEventListener('dragstart', e => {
+                    draggedItem = e.target;
+                    setTimeout(() => e.target.style.display = 'none', 0);
+                });
+                item.addEventListener('dragend', () => {
+                    if(draggedItem) {
+                       draggedItem.style.display = 'block';
+                       draggedItem = null;
+                    }
+                });
             });
-            
-            tableElement.append(headerRow, nameRow, earlyPatientsRow, noonInPatientsRow, noonOutPatientsRow);
-            tableElement.querySelectorAll('.name-select').forEach(s => {
-                if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId];
-            });
-        };
 
-        const generateLateShiftTable = (tableElement, shiftPrefix, statsData, statsNames) => {
-            tableElement.innerHTML = '';
-            const headerRow = document.createElement('tr');
-            headerRow.className = 'team-header-row';
-            headerRow.innerHTML = `<th class="row-header"></th>`;
-            const nameRow = document.createElement('tr');
-            nameRow.innerHTML = `<th class="row-header">姓名</th>`;
-            const noonOutPatientsRow = document.createElement('tr');
-            noonOutPatientsRow.innerHTML = `<th class="row-header">午班(收針)</th>`;
-            const latePatientsRow = document.createElement('tr');
-            latePatientsRow.innerHTML = `<th class="row-header">晚班</th>`;
-
-            baseTeams.forEach(team => {
-                const fullTeamName = `${shiftPrefix}${team}`;
-                const teamData = statsData[fullTeamName] || { noon_out: [], late: [] };
-                headerRow.innerHTML += `<td>${fullTeamName}組</td>`;
-                nameRow.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${fullTeamName}">${nurseOptionsHTML}</select></td>`;
-                noonOutPatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.noon_out)}</td>`;
-                latePatientsRow.innerHTML += `<td class="patient-list-cell">${formatPatientListWithColor(teamData.late)}</td>`;
+            patientCells.forEach(cell => {
+                cell.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    cell.classList.add('drag-over');
+                });
+                cell.addEventListener('dragleave', e => {
+                    cell.classList.remove('drag-over');
+                });
+                cell.addEventListener('drop', e => {
+                    e.preventDefault();
+                    cell.classList.remove('drag-over');
+                    if (draggedItem) {
+                        const originalShiftId = draggedItem.dataset.shiftId;
+                        const newTeam = cell.dataset.teamId;
+                        
+                        if (currentRecord.schedule[originalShiftId]) {
+                            // Update nurse assignment based on shift type
+                            if (originalShiftId.includes('-午-')) {
+                                const oldTeam = currentRecord.schedule[originalShiftId].nurse_in;
+                                if (cell.closest('table').id === 'early-shift-table') {
+                                    currentRecord.schedule[originalShiftId].nurse_in = newTeam;
+                                } else { // late-shift-table
+                                     currentRecord.schedule[originalShiftId].nurse_out = newTeam;
+                                }
+                            } else {
+                                currentRecord.schedule[originalShiftId].nurse = newTeam;
+                            }
+                            cell.appendChild(draggedItem);
+                            setChange();
+                        }
+                    }
+                });
             });
-            
-            tableElement.append(headerRow, nameRow, noonOutPatientsRow, latePatientsRow);
-            tableElement.querySelectorAll('.name-select').forEach(s => {
-                if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId];
-            });
-        };
+        }
 
+        async function saveChanges() {
+            const newNames = {};
+            document.querySelectorAll('.name-select').forEach(select => {
+                if (select.value) {
+                    newNames[select.dataset.teamId] = select.value;
+                }
+            });
+            currentRecord.names = newNames;
+
+            setStatus('儲存中...', 'loading');
+            try {
+                await schedulesApi.update(currentRecord.id, currentRecord);
+                hasUnsavedChanges = false;
+                saveBtn.disabled = true;
+                setStatus('變更已儲存', 'saved');
+                alert('變更儲存成功！');
+            } catch (error) {
+                console.error("儲存變更失敗:", error);
+                setStatus('儲存失敗', 'error');
+                alert(`儲存失敗: ${error.message}`);
+            }
+        }
+        
         function updateAndLoad(newDate) {
+            if (hasUnsavedChanges && !confirm('您有未儲存的變更，確定要切換日期嗎？所有變更將會遺失。')) return;
             currentDate = newDate;
             const dateStr = formatDate(currentDate);
-            dateDisplay.textContent = `${dateStr} 統計報表`;
+            document.getElementById('current-date-display').textContent = `${dateStr} 統計報表`;
             const newUrl = new URL(window.location);
             newUrl.searchParams.set('date', dateStr);
             window.history.pushState({}, '', newUrl);
-            loadStatsFromCloud(dateStr);
+            loadData(dateStr);
         }
 
         function changeDate(days) {
@@ -269,40 +312,19 @@
             newDate.setDate(newDate.getDate() + days);
             updateAndLoad(newDate);
         }
-
-        function goToToday() {
-            updateAndLoad(new Date());
-        }
         
-        function clearNames() {
-            if (!currentRecord) { alert("目前沒有資料可清空。"); return; }
-            if (confirm("確定要清空本日所有的護理師姓名嗎？此操作將會儲存至雲端。")) {
-                document.querySelectorAll('.name-select').forEach(select => { select.value = ''; });
-                saveNamesToCloud({});
-            }
-        }
-
         function initialize() {
             const urlParams = new URLSearchParams(window.location.search);
             const dateFromUrl = urlParams.get('date');
-            
             const initialDate = dateFromUrl ? new Date(dateFromUrl + 'T00:00:00') : new Date();
-            if (isNaN(initialDate.getTime())) {
-                 updateAndLoad(new Date());
-            } else {
-                 updateAndLoad(initialDate);
-            }
+            updateAndLoad(initialDate);
         }
 
-        saveNamesBtn.addEventListener('click', () => {
-            const newNames = {};
-            document.querySelectorAll('.name-select').forEach(select => { if (select.value) { newNames[select.dataset.teamId] = select.value; } });
-            saveNamesToCloud(newNames);
-        });
-        clearNamesBtn.addEventListener('click', clearNames);
+        // Event Listeners
+        saveBtn.addEventListener('click', saveChanges);
         document.getElementById('prev-date-btn').addEventListener('click', () => changeDate(-1));
         document.getElementById('next-date-btn').addEventListener('click', () => changeDate(1));
-        document.getElementById('today-btn').addEventListener('click', goToToday);
+        document.getElementById('today-btn').addEventListener('click', () => updateAndLoad(new Date()));
         
         initialize();
     });
