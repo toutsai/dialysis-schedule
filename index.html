@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>血液透析綜合管理平台</title>
+    <title>血液透析綜合管理平台 (新架構)</title>
     <style>
         html, body {
             margin: 0;
@@ -80,9 +80,9 @@
             <ul class="sidebar-nav">
                 <li><a href="schedule.html" class="nav-link active" target="content-iframe">每日排程表</a></li>
                 <li><a href="stats.html" class="nav-link" target="content-iframe">護理分組檢視</a></li>
-                <li><a href="weekly_view.html" class="nav-link" target="content-iframe">週排班總表</a></li>
                 <li><a href="patients.html" class="nav-link" target="content-iframe">病人管理系統</a></li>
-                <li><a href="base_schedule.html" class="nav-link" target="content-iframe">常規門診床位表</a></li>
+                <li><a href="weekly_view.html" class="nav-link" target="content-iframe">週排班總表</a></li>
+                <li><a href="base_schedule.html" class="nav-link" target="content-iframe">常規門診設定</a></li>
                 <li><a href="memo.html" class="nav-link" target="content-iframe">交班備忘錄</a></li>
             </ul>
         </aside>
@@ -98,7 +98,14 @@
         const iframe = document.querySelector('.content-iframe');
 
         const schedulesApi = ApiManager('schedules');
-        const BASE_SCHEDULE_API_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/dialysis_base_schedule/1';
+        const BASE_SCHEDULE_APIS = {
+            0: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_mon', // Monday
+            1: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_tue',
+            2: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_wed',
+            3: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_thu',
+            4: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_fri',
+            5: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_sat',
+        };
         const MEMOS_API_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/memos';
 
         function getStartOfWeek(date) {
@@ -125,18 +132,23 @@
         async function preGenerateSchedules() {
             console.log("開始檢查並預生成排班...");
             try {
-                const baseRes = await fetch(BASE_SCHEDULE_API_URL);
-                if (!baseRes.ok) {
-                    console.log("未找到常規門診範本，不進行預生成。");
-                    return;
-                }
-                const baseData = await baseRes.json();
-                const baseSchedule = baseData.scheduleData;
-                if (!baseSchedule || Object.keys(baseSchedule).length === 0) {
-                    console.log("常規門診範本為空，不進行預生成。");
-                    return;
-                }
-                
+                // 1. Fetch all base schedule templates for each day of the week
+                const baseTemplatesByDay = {};
+                const baseSchedulePromises = Object.entries(BASE_SCHEDULE_APIS).map(async ([dayIndex, url]) => {
+                    const response = await fetch(url);
+                    const records = response.ok ? await response.json() : [];
+                    const scheduleTemplate = {};
+                    records.forEach(record => {
+                        const [bed, shiftIndex] = record.slotId.split('-');
+                        const shiftName = ['早班', '午班', '晚班'][shiftIndex];
+                        const dailyShiftId = `bed-${bed}-${shiftName}`;
+                        scheduleTemplate[dailyShiftId] = { patientId: record.patientId, shiftId: dailyShiftId };
+                    });
+                    baseTemplatesByDay[dayIndex] = scheduleTemplate;
+                });
+                await Promise.all(baseSchedulePromises);
+
+                // 2. Define the date range to check (this week and next week)
                 const thisWeekStart = getStartOfWeek(new Date());
                 const nextWeekStart = new Date(thisWeekStart);
                 nextWeekStart.setDate(nextWeekStart.getDate() + 7);
@@ -151,6 +163,7 @@
                     }
                 });
 
+                // 3. Check which daily records already exist
                 const existingSchedules = await schedulesApi.fetchAll();
                 const existingDates = new Set(existingSchedules.map(rec => rec.date));
 
@@ -163,22 +176,25 @@
 
                 console.log(`準備為以下日期生成排班: ${datesToCreate.join(', ')}`);
                 
-                const scheduleTemplate = {};
-                Object.entries(baseSchedule).forEach(([slotId, patientId]) => {
-                    const [bed, shiftIndex] = slotId.split('-');
-                    const shiftName = Object.keys({ '早': 0, '午': 1, '晚': 2 })[shiftIndex];
-                    const dailyShiftId = `bed-${bed}-${shiftName}`;
-                    scheduleTemplate[dailyShiftId] = { patientId: patientId };
-                });
-
+                // 4. Create new daily records for the missing dates
                 for (const dateStr of datesToCreate) {
-                    const newRecord = {
-                        date: dateStr,
-                        schedule: scheduleTemplate,
-                        names: {}
-                    };
-                    await schedulesApi.save(newRecord);
-                    console.log(`已成功生成 ${dateStr} 的排班記錄。`);
+                    const date = new Date(dateStr + "T00:00:00");
+                    const dayIndex = date.getDay() - 1; // 0 for Monday, etc.
+                    
+                    if (dayIndex >= 0 && dayIndex < 6) {
+                        const templateForThisDay = baseTemplatesByDay[dayIndex];
+                        if (templateForThisDay && Object.keys(templateForThisDay).length > 0) {
+                            const newRecord = {
+                                date: dateStr,
+                                schedule: templateForThisDay,
+                                names: {}
+                            };
+                            await schedulesApi.save(newRecord);
+                            console.log(`已成功使用週${dayIndex+1}範本生成 ${dateStr} 的排班記錄。`);
+                        } else {
+                             console.log(`週${dayIndex+1} 的常規範本為空，不為 ${dateStr} 生成記錄。`);
+                        }
+                    }
                 }
 
             } catch (error) {
@@ -207,8 +223,10 @@
             }
         }
 
+        // Run the initializer when the main page loads
         systemInitializer();
 
+        // Navigation logic
         window.navigateTo = function(pageUrl) {
             if (iframe.src !== pageUrl) {
                 iframe.src = pageUrl;
