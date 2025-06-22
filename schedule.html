@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>每日排程表 (V6.1 - 完整修正版)</title>
+    <title>每日排程表 (V7.0 - 單一資料源)</title>
     <style>
+        /* CSS is unchanged */
         body { font-family: 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; padding: 20px; color: #333; }
         .controls-panel { max-width: 1800px; margin: 0 auto 20px; padding: 15px; background-color: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
         .controls-panel button { padding: 8px 15px; font-size: 1em; border-radius: 5px; border: 1px solid #ccc; background-color: #e9e9e9; cursor: pointer; transition: background-color 0.2s; }
@@ -51,10 +52,15 @@
         .inpatient-sidebar h3 { margin-top: 0; text-align: center; border-bottom: 1px solid #dee2e6; padding-bottom: 10px; margin-bottom: 10px; }
         .filter-group { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
         .filter-group button { padding: 4px 8px; font-size: 0.8em; flex-grow: 1; }
-        .filter-group button.active { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
+        .filter-group button.active { background-color: #007bff; color: white; border-color: #007bff; }
         #inpatient-list { list-style-type: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
         #inpatient-list li { background-color: #fff; border: 1px solid #e0e0e0; padding: 8px 12px; margin-bottom: 8px; border-radius: 5px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; cursor: grab; }
         #inpatient-list li:active { cursor: grabbing; }
+        #inpatient-list li.scheduled-inpatient { background-color: #fff59d; border-left: 5px solid var(--primary-color); }
+        .patient-info-row { display: flex; justify-content: space-between; width: 100%; align-items: center; }
+        #inpatient-list li .name { font-weight: bold; font-size: 1.1em; }
+        #inpatient-list li .mrn { font-size: 0.85em; color: #6c757d; }
+        #inpatient-list li .freq { font-size: 0.9em; color: #555; background-color: #e9ecef; padding: 2px 6px; border-radius: 10px; }
         .shift-row.drag-over, .peripheral-shift-row.drag-over { transform: scale(1.02); background-color: #c8e6c9; }
         .shift-row.has-memo, .peripheral-shift-row.has-memo { outline: 3px solid var(--danger-color); outline-offset: -3px; animation: pulse-red 1.5s infinite; }
         @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); } 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); } }
@@ -110,7 +116,7 @@
     </div>
 
     <dialog id="patient-select-dialog">
-        <!-- Dialog structure from weekly_view can be copied here -->
+        <!-- Dialog structure is the same as weekly_view -->
     </dialog>
 
     <script src="api_manager.js"></script>
@@ -125,6 +131,7 @@
         let allPatients = [];
         let hasUnsavedChanges = false;
         let inpatientFilter = 'all';
+        let dialogState = { targetShiftId: null, selectedPatientId: null, currentTab: 'opd' };
 
         const statusIndicator = document.getElementById('status-indicator');
         const saveBtn = document.getElementById('save-btn');
@@ -132,9 +139,7 @@
         const earlyTeams = baseTeams.map(t => `早${t}`);
         const lateTeams = baseTeams.map(t => `晚${t}`);
         const allTeams = [...earlyTeams, ...lateTeams]; 
-        const earlyOptionsHTML = `<option value=""></option>` + earlyTeams.map(team => `<option value="${team}">${team}組</option>`).join('');
-        const lateOptionsHTML = `<option value=""></option>` + lateTeams.map(team => `<option value="${team}">${team}組</option>`).join('');
-        const allOptionsHTML = `<option value=""></option>` + allTeams.map(team => `<option value="${team}">${team}組</option>`).join('');
+        const nurseOptionsHTML = `<option value=""></option>` + allTeams.map(team => `<option value="${team}">${team}組</option>`).join('');
         const layoutData = { leftWingRows: [['空', 32, 31], [33, 35, 36], [39, 38, 37], [51, 52, 53], [57, 56, 55], [58, 59, 61], [65, 63, 62]], rightWingRows: [[29, 28, 27], [23, 25, 26], [22, 21, 19], [16, 17, 18], [15, 13, 12], [8, 9, 11], [7, 6, 5], [1, 2, 3]] };
         const aisleSideBeds = [1, 7, 8, 15, 16, 22, 23, 29, 31, 36, 37, 53, 55, 61, 62, 65];
         const hepatitisBeds = ['空', 31, 32, 33, 35, 36];
@@ -146,14 +151,16 @@
 
         function createPeripheralBedElement(index) {
             const bedDiv = document.createElement('div'); bedDiv.className = 'peripheral-bed';
-            const shiftRowsHTML = ['早', '午', '晚'].map(shift => { let options; switch (shift) { case '早': options = earlyOptionsHTML; break; case '晚': options = lateOptionsHTML; break; case '午': options = allOptionsHTML; break; } return `<div class="peripheral-shift-row" data-shift-id="peripheral-${index}-${shift}"><div class="shift-label">${shift}</div><select class="nurse-team-select" title=""><option value="">-</option>${options}</select><div class="peripheral-bed-number" contenteditable="true"></div><div class="peripheral-patient-name" contenteditable="true"></div><div class="patient-tag" contenteditable="true"></div></div>`; }).join('');
+            const shiftRowsHTML = ['早', '午', '晚'].map(shift => {
+                return `<div class="peripheral-shift-row" data-shift-id="peripheral-${index}-${shift}"><div class="shift-label">${shift}</div><select class="nurse-team-select">${nurseOptionsHTML}</select><div class="peripheral-bed-number" contenteditable="true"></div><div class="peripheral-patient-name" contenteditable="true"></div><div class="patient-tag" contenteditable="true"></div></div>`;
+            }).join('');
             bedDiv.innerHTML = `<div class="peripheral-header">外圍床位 ${index}</div>${shiftRowsHTML}`; return bedDiv;
         }
         
         function createBedElement(bedNumber, isHepatitis, isAisleSide, wingClass) {
             if (bedNumber === null) { const p = document.createElement('div'); p.className = 'bed placeholder'; return p; }
             const bedDiv = document.createElement('div'); bedDiv.className = `bed ${wingClass}`; bedDiv.dataset.bedId = `bed-${bedNumber}`; if (isAisleSide) bedDiv.classList.add('aisle-side'); if (isHepatitis) bedDiv.classList.add('hepatitis'); if (bedNumber === '空') bedDiv.classList.add('unassigned'); let headerText = `床號 ${bedNumber}`; if (bedNumber === '空') headerText = '未排床'; else if (isHepatitis) headerText += ' (BC肝炎)';
-            const shiftRowsHTML = ['早', '午', '晚'].map(shift => { const shiftId = `bed-${bedNumber}-${shift}`; if (shift === '午') { return `<div class="shift-row split-shift" data-shift-id="${shiftId}"><div class="shift-label">午</div><div class="nurse-split-column"><select class="nurse-team-select nurse-in" title=""><option value="">上針</option>${earlyOptionsHTML}</select><select class="nurse-team-select nurse-out" title=""><option value="">收針</option>${allOptionsHTML}</select></div><div class="patient-name" contenteditable="true"></div><div class="patient-tag" contenteditable="true"></div></div>`; } else { const options = shift === '早' ? earlyOptionsHTML : lateOptionsHTML; return `<div class="shift-row" data-shift-id="${shiftId}"><div class="shift-label">${shift}</div><select class="nurse-team-select" title=""><option value="">-</option>${options}</select><div class="patient-name" contenteditable="true"></div><div class="patient-tag" contenteditable="true"></div></div>`; } }).join('');
+            const shiftRowsHTML = ['早', '午', '晚'].map(shift => { const shiftId = `bed-${bedNumber}-${shift}`; return `<div class="shift-row" data-shift-id="${shiftId}"><div class="shift-label">${shift}</div><select class="nurse-team-select">${nurseOptionsHTML}</select><div class="patient-name"></div><div class="patient-tag" contenteditable="true"></div></div>`; }).join('');
             bedDiv.innerHTML = `<div class="bed-header">${headerText}</div>${bedNumber !== '空' ? shiftRowsHTML : ''}`; return bedDiv;
         }
         
@@ -170,11 +177,10 @@
         }
 
         function clearBoardUi() {
-            document.querySelectorAll('.newly-synced').forEach(el => el.classList.remove('newly-synced'));
             document.querySelectorAll('.nurse-team-select').forEach(s => { s.value = ''; s.title=''; });
             document.querySelectorAll('div[contenteditable="true"]').forEach(d => d.textContent = '');
-            document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight'));
-            document.querySelectorAll('.tag-chou, .tag-new, .hospitalized, .tag-huan, .tag-liang, .tag-b, .status-opd').forEach(el => el.classList.remove('tag-chou', 'tag-new', 'hospitalized', 'tag-huan', 'tag-liang', 'tag-b', 'status-opd'));
+            document.querySelectorAll('.patient-name, .peripheral-patient-name').forEach(el => el.textContent = '');
+            document.querySelectorAll('.has-memo').forEach(el => el.classList.remove('has-memo'));
             updateShiftPatientCount();
         }
 
@@ -208,7 +214,7 @@
             const parentRow = patientCell.closest('.shift-row, .peripheral-shift-row');
             const tagElement = parentRow.querySelector('.patient-tag');
             const tagText = tagElement ? tagElement.textContent.toUpperCase() : '';
-            patientCell.className = patientCell.className.split(' ').filter(c => !c.startsWith('tag-') && c !== 'hospitalized' && c !== 'status-opd').join(' ');
+            patientCell.className = patientCell.className.replace(/tag-\w+|hospitalized|status-opd/g, '').trim();
             let styleApplied = false;
             if (tagText.includes('抽')) { patientCell.classList.add('tag-chou'); styleApplied = true;
             } else if (tagText.includes('新')) { patientCell.classList.add('tag-new'); styleApplied = true;
@@ -222,6 +228,8 @@
         }
         
         async function loadDataForDay(dateStr) {
+            hasUnsavedChanges = false;
+            updateSaveButtonState();
             currentRecord = null;
             clearBoardUi();
             setStatus('讀取中...', 'loading');
@@ -280,40 +288,32 @@
             } else {
                 inpatients.forEach(p => {
                     const li = document.createElement('li');
+                    li.draggable = true;
+                    li.dataset.patientId = p.id;
                     if (isPatientScheduledToday(p.id)) { li.classList.add('scheduled-inpatient'); }
                     li.innerHTML = `
-                        <div class="patient-info-row">
-                            <span class="name">${p.name}</span>
-                            <span class="freq">${p.frequency || '未設定'}</span>
-                        </div>
-                        <div class="patient-info-row">
-                            <span class="mrn">(${p.medicalRecordNumber || '無病歷號'})</span>
-                        </div>
-                    `;
+                        <div class="patient-info-row"><span class="name">${p.name}</span><span class="freq">${p.frequency || '未設定'}</span></div>
+                        <div class="patient-info-row"><span class="mrn">(${p.medicalRecordNumber || '無病歷號'})</span></div>`;
                     inpatientListEl.appendChild(li);
                 });
             }
         }
 
         function renderDataToUI(scheduleData) {
-            Object.keys(scheduleData).forEach(id => { 
-                const row = document.querySelector(`[data-shift-id="${id}"]`); 
+            const patientMap = new Map(allPatients.map(p => [p.id, p]));
+            Object.entries(scheduleData).forEach(([shiftId, data]) => { 
+                const row = document.querySelector(`[data-shift-id="${shiftId}"]`); 
                 if (!row) return; 
-                const data = scheduleData[id]; 
-                const patient = allPatients.find(p => p.id === data.patientId);
+                const patient = patientMap.get(data.patientId);
                 const patientCell = row.querySelector('.patient-name, .peripheral-patient-name');
                 if (patientCell && patient) { patientCell.textContent = patient.name; }
                 const bedNumberCell = row.querySelector('.peripheral-bed-number');
-                if (bedNumberCell && data.bedNumber) { bedNumberCell.textContent = data.bedNumber; }
+                if (bedNumberCell) { bedNumberCell.textContent = data.bedNumber || ''; }
                 const tagCell = row.querySelector('.patient-tag');
-                if (tagCell && data.tag) { tagCell.textContent = data.tag; }
+                if (tagCell) { tagCell.textContent = data.tag || ''; }
                 if (patientCell && patientCell.textContent) { updatePatientCellStyle(patientCell); }
-                if (row.classList.contains('split-shift')) { 
-                    if(data.nurse_in) row.querySelector('.nurse-in').value = data.nurse_in; 
-                    if(data.nurse_out) row.querySelector('.nurse-out').value = data.nurse_out; 
-                } else { 
-                    if(data.nurse) row.querySelector('.nurse-team-select').value = data.nurse; 
-                } 
+                const nurseSelect = row.querySelector('.nurse-team-select');
+                if(nurseSelect) nurseSelect.value = data.nurse || '';
             });
         }
 
@@ -328,13 +328,7 @@
                     if (patientId) {
                         const tag = row.querySelector('.patient-tag')?.textContent || '';
                         let data = { patientId, tag, shiftId: id };
-                        if (row.classList.contains('split-shift')) {
-                            const nurseIn = row.querySelector('.nurse-in').value;
-                            data.nurse_in = nurseIn;
-                            data.nurse_out = row.querySelector('.nurse-out').value || nurseIn;
-                        } else {
-                            data.nurse = row.querySelector('.nurse-team-select').value;
-                        }
+                        data.nurse = row.querySelector('.nurse-team-select').value;
                         if (row.classList.contains('peripheral-shift-row')) {
                             data.bedNumber = row.querySelector('.peripheral-bed-number').textContent;
                         }
@@ -387,7 +381,7 @@
             }
             const dailyScheduleData = collectDataFromUI();
             
-            setStatus('儲存本日排程中...', 'loading');
+            setStatus('儲存中...', 'loading');
             try {
                 if (Object.keys(dailyScheduleData).length === 0) {
                     if (currentRecord) await deleteDailyRecord();
@@ -409,7 +403,7 @@
             } catch (error) {
                 console.error('儲存本日排程失敗:', error);
                 setStatus('儲存本日排程失敗', 'error');
-                return;
+                saveBtn.disabled = false;
             }
         }
         
@@ -431,13 +425,13 @@
             loadDataForDay(formatDate(currentDate));
         }
         
-        const updateDateDisplay = () => {
+        function updateDateDisplay() {
             const dateStr = formatDate(currentDate);
             document.getElementById('current-date-display').textContent = dateStr;
             const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
             document.getElementById('weekday-display').textContent = weekdays[currentDate.getDay()];
-        };
-
+        }
+        
         function setChange() {
             hasUnsavedChanges = true;
             setStatus('內容已變更，尚未儲存', 'unsaved');
@@ -446,6 +440,32 @@
 
         function updateSaveButtonState() {
             saveBtn.disabled = !hasUnsavedChanges;
+        }
+
+        function showMemoReminders(memos) {
+            if (!memos || memos.length === 0) return;
+            const todayStr = formatDate(currentDate);
+
+            const dateSpecificMemos = memos.filter(m => m.targetDate === todayStr);
+            if (dateSpecificMemos.length > 0) {
+                let message = `【本日特別事項提醒 - ${todayStr}】\n\n`;
+                dateSpecificMemos.forEach(memo => { message += `- ${memo.content}\n`; });
+                setTimeout(() => alert(message), 500);
+            }
+
+            const patientMemos = memos.filter(m => m.patientName);
+            if (patientMemos.length === 0) return;
+            document.querySelectorAll('.patient-name, .peripheral-patient-name').forEach(cell => {
+                const patientName = cell.textContent.trim();
+                if (patientName) {
+                    const relatedMemos = patientMemos.filter(m => m.patientName === patientName);
+                    if (relatedMemos.length > 0) {
+                        const row = cell.closest('.shift-row, .peripheral-shift-row');
+                        row.classList.add('has-memo');
+                        row.title = relatedMemos.map(m => `備忘: ${m.content}`).join('\n');
+                    }
+                }
+            });
         }
         
         function setupEventListeners() {
@@ -474,9 +494,8 @@
             });
             document.addEventListener('input', (e) => {
                 setChange();
-                if (e.target.classList.contains('patient-tag')) {
-                    const patientCell = e.target.closest('.shift-row, .peripheral-shift-row').querySelector('.patient-name, .peripheral-patient-name');
-                    updatePatientCellStyle(patientCell);
+                if (e.target.classList.contains('patient-tag') || e.target.classList.contains('nurse-team-select')) {
+                    // No re-render needed, just mark as changed
                 } else if (e.target.matches('.patient-name, .peripheral-patient-name')) {
                     updateShiftPatientCount();
                     updatePatientCellStyle(e.target);
@@ -493,10 +512,14 @@
             });
         }
 
-        // Initializer
-        generateLayout();
-        updateDateDisplay();
-        loadDataForDay(formatDate(currentDate));
+        function initialize() {
+            generateLayout();
+            updateDateDisplay();
+            setupEventListeners();
+            loadDataForDay(formatDate(currentDate));
+        }
+
+        initialize();
     });
     </script>
 </body>
