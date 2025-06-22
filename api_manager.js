@@ -12,8 +12,18 @@ const API_ENDPOINTS = {
         'https://6852ef850594059b23cfaa4f.mockapi.io/patients9',
         'https://6852ef850594059b23cfaa4f.mockapi.io/patients10'
     ],
-    schedules: ['https://6852ef850594059b23cfaa4f.mockapi.io/schedules'],
-    weekly_schedule: ['https://6852ef850594059b23cfaa4f.mockapi.io/weekly_schedule']
+    schedules: [
+        'https://6852ef850594059b23cfaa4f.mockapi.io/schedules',
+        'https://6852ef850594059b23cfaa4f.mockapi.io/schedules2',
+        'https://6852ef850594059b23cfaa4f.mockapi.io/schedules3',
+        'https://6852ef850594059b23cfaa4f.mockapi.io/schedules4',
+        'https://6852ef850594059b23cfaa4f.mockapi.io/schedules5',
+        'https://6852ef850594059b23cfaa4f.mockapi.io/schedules6',
+        'https://6852ef850594059b23cfaa4f.mockapi.io/schedules7',
+        'https://6852ef850594059b23cfaa4f.mockapi.io/schedules8',
+        'https://6852ef850594059b23cfaa4f.mockapi.io/schedules9',
+        'https://6852ef850594059b23cfaa4f.mockapi.io/schedules10',
+    ],
 };
 
 const ApiManager = (resourceType) => {
