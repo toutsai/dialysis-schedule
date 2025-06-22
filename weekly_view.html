@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>週排班總表 (V5.2 - 日期與API修正)</title>
+    <title>週排班總表 (V5.3 - 完整修正版)</title>
     <style>
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
@@ -83,6 +83,7 @@
         .patient-name { font-size: 1.1em; }
         .patient-mrn { font-size: 0.85em; color: #6c757d; }
         .patient-meta { display: flex; align-items: center; gap: 8px; font-size: 0.9em; }
+        .disease-tag-small { display: inline-block; padding: 1px 5px; font-size: 0.8em; font-weight: bold; color: var(--danger-color); border: 1px solid var(--danger-color); border-radius: 4px; }
         .modal-footer { margin-top: 20px; text-align: right; }
         .radio-group { display: flex; align-items: center; gap: 8px; }
         #dialog-confirm-btn:disabled { background-color: #ccc; border-color: #ccc; cursor: not-allowed; }
@@ -120,7 +121,7 @@
     <dialog id="patient-select-dialog">
         <h3 id="dialog-title">新增排班</h3>
         <div class="dialog-tabs">
-            <button class="dialog-tab-btn active" data-type="opd">門診常規</button>
+            <button class="dialog-tab-btn active" data-type="opd">門診病人</button>
             <button class="dialog-tab-btn" data-type="ipd">住院病人</button>
         </div>
         <div class="dialog-filters">
@@ -287,14 +288,8 @@
                     li.draggable = true;
                     li.dataset.patientId = p.id;
                     li.innerHTML = `
-                        <div class="patient-info-row">
-                            <span class="name">${p.name}</span>
-                            <span class="freq">${p.frequency || '未設定'}</span>
-                        </div>
-                        <div class="patient-info-row">
-                            <span class="mrn">(${p.medicalRecordNumber || '無病歷號'})</span>
-                        </div>
-                    `;
+                        <div class="patient-info-row"><span class="name">${p.name}</span><span class="freq">${p.frequency || '未設定'}</span></div>
+                        <div class="patient-info-row"><span class="mrn">(${p.medicalRecordNumber || '無病歷號'})</span></div>`;
                     inpatientList.appendChild(li);
                 });
             }
@@ -358,9 +353,11 @@
             const freqFilter = document.getElementById('freq-filter');
             const diseaseFilter = document.getElementById('disease-filter');
             const patientListContainer = document.getElementById('patient-list-container');
+            const dialogTabs = document.querySelector('.dialog-tabs');
             patientSearchInput.addEventListener('input', renderPatientListInDialog);
             freqFilter.addEventListener('change', renderPatientListInDialog);
             diseaseFilter.addEventListener('change', renderPatientListInDialog);
+            dialogTabs.addEventListener('click', e => { if (e.target.matches('.dialog-tab-btn')) { dialogTabs.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); dialogState.currentTab = e.target.dataset.type; renderPatientListInDialog(); } });
             patientListContainer.addEventListener('click', e => { const item = e.target.closest('.patient-list-item'); if (item) { const previouslySelected = patientListContainer.querySelector('.selected'); if (previouslySelected) { previouslySelected.classList.remove('selected'); } item.classList.add('selected'); dialogState.selectedPatientId = item.dataset.patientId; confirmBtn.disabled = false; } });
             confirmBtn.addEventListener('click', handleAddSchedule);
             cancelBtn.addEventListener('click', () => dialog.close());
@@ -382,7 +379,7 @@
             scheduleArea.addEventListener('drop', e => { e.preventDefault(); const slot = e.target.closest('.schedule-slot'); if (slot) { slot.classList.remove('drag-over'); if (slot.classList.contains('filled')) { alert("此床位已有排班，請先清除。"); return; } const patientId = e.dataTransfer.getData('text/plain'); const slotId = slot.dataset.slotId; if (patientId) { handleSlotUpdate(slotId, patientId); } } });
         }
 
-        function openAddScheduleDialog(slotId) {
+        function openPatientDialog(slotId) {
             const dialog = document.getElementById('patient-select-dialog');
             dialogState.slotId = slotId;
             dialogState.selectedPatientId = null;
@@ -414,7 +411,18 @@
                 patientListContainer.innerHTML = `<div style="padding: 20px; text-align:center; color: #888;">無符合條件的病人</div>`;
                 return;
             }
-            patientListContainer.innerHTML = patientsToShow.map(p => ` <div class="patient-list-item" data-patient-id="${p.id}"> <div class="patient-main-info"> <span class="patient-name">${p.name}</span> <span class="patient-mrn">(${p.medicalRecordNumber || 'N/A'})</span> </div> <div class="patient-meta"> ${(p.diseases || []).map(d => `<span class="disease-tag-small">${d}</span>`).join(' ')} <span>${p.frequency || '未設定'}</span> </div> </div> `).join('');
+            patientListContainer.innerHTML = patientsToShow.map(p => `
+                <div class="patient-list-item" data-patient-id="${p.id}">
+                    <div class="patient-main-info">
+                        <span class="patient-name">${p.name}</span>
+                        <span class="patient-mrn">(${p.medicalRecordNumber || 'N/A'})</span>
+                    </div>
+                    <div class="patient-meta">
+                        ${(p.diseases || []).map(d => `<span class="disease-tag-small">${d}</span>`).join(' ')}
+                        <span>${p.frequency || '未設定'}</span>
+                    </div>
+                </div>
+            `).join('');
         }
         
         const handleAddSchedule = () => { 
@@ -433,13 +441,26 @@
             document.getElementById('add-schedule-dialog').close(); 
         };
         
+        function handleGridClick(e) {
+            const slot = e.target.closest('.schedule-slot');
+            if (!slot) return;
+            const slotId = slot.dataset.slotId;
+            if (slot.classList.contains('filled')) {
+                if (confirm('確定要清除此床位的排班嗎？')) {
+                    handleSlotUpdate(slotId, null);
+                }
+            } else {
+                openAddScheduleDialog(slotId);
+            }
+        }
+
         function handleSlotUpdate(slotId, patientId) {
             const [bed, shiftIndex, dayIndex] = slotId.split('-');
             const dateStr = formatDate(new Date(new Date(currentWeekStartDate).setDate(currentWeekStartDate.getDate() + parseInt(dayIndex))));
             let dailyRecord = weekScheduleRecords.get(dateStr);
 
             if (!dailyRecord) {
-                dailyRecord = { date: dateStr, schedule: {}, names: {}, _sourceEndpoint: schedulesApi.getEndpointForSave() }; // This line might be problematic if getEndpointForSave is not part of your api_manager
+                dailyRecord = { date: dateStr, schedule: {}, names: {} };
                 weekScheduleRecords.set(dateStr, dailyRecord);
             }
             if (!dailyRecord.schedule) dailyRecord.schedule = {};
