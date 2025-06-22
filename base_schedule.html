@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>常規門診病人床位表</title>
+    <style>
+        :root {
+            --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
+            --border-color: #dee2e6; --sidebar-bg: #f8f9fa; --green-bg: #e8f5e9;
+        }
+        body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
+        .container { max-width: 1800px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid var(--border-color); }
+        .header h1 { margin: 0; }
+        .header button { padding: 10px 20px; font-size: 1.1em; border-radius: 5px; border: none; color: white; cursor: pointer; }
+        #save-btn { background-color: var(--success-color); }
+        #save-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+        .status-indicator { font-weight: bold; }
+        .status-indicator.loading { color: #ff9800; }
+        .status-indicator.saved { color: #4CAF50; }
+        .status-indicator.error { color: #f44336; }
+        .schedule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; }
+        .bed-card { border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
+        .bed-header { background-color: #e9ecef; padding: 8px; font-size: 1.2em; font-weight: bold; text-align: center; }
+        .shift-slot { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-top: 1px solid #f1f1f1; }
+        .shift-label { font-weight: bold; color: #555; }
+        .patient-cell { flex-grow: 1; text-align: center; padding: 8px; margin: 0 10px; border-radius: 5px; cursor: pointer; background-color: #f8f9fa; border: 1px dashed #ccc; }
+        .patient-cell.filled { background-color: var(--green-bg); border-style: solid; font-weight: bold; }
+        .patient-cell:hover { background-color: #e2e6ea; }
+        .action-btn { background: none; border: none; cursor: pointer; font-size: 1.2em; color: #888; }
+        .action-btn:hover { color: var(--danger-color); }
+        
+        dialog { border: 1px solid #ccc; border-radius: 8px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 90%; max-width: 500px; }
+        dialog::backdrop { background-color: rgba(0,0,0,0.5); }
+        dialog h3 { margin-top: 0; }
+        #patient-list-container { max-height: 350px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; margin-top: 10px; }
+        .patient-list-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; }
+        .patient-list-item:hover { background-color: #f0f0f0; }
+        .patient-list-item.selected { background-color: var(--blue-bg); font-weight: bold; }
+        .modal-footer { margin-top: 20px; text-align: right; }
+        .modal-footer button { margin-left: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>常規門診床位表</h1>
+            <div>
+                <span id="status-indicator" class="status-indicator"></span>
+                <button id="save-btn" disabled>儲存變更</button>
+            </div>
+        </div>
+        <div class="schedule-grid" id="schedule-grid">
+            <!-- Bed cards will be generated here -->
+        </div>
+    </div>
+
+    <dialog id="patient-select-dialog">
+        <h3 id="dialog-title">選擇門診病人</h3>
+        <input type="text" id="patient-search" placeholder="搜尋姓名或病歷號..." style="width: 100%; padding: 8px; box-sizing: border-box;">
+        <div id="patient-list-container"></div>
+        <div class="modal-footer">
+            <button id="dialog-cancel-btn" value="cancel">取消</button>
+            <button id="dialog-confirm-btn" disabled>確認</button>
+        </div>
+    </dialog>
+
+    <script src="api_manager.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const patientsApi = ApiManager('patients');
+        // --- CHANGE START: Define a new API endpoint for the base schedule ---
+        const BASE_SCHEDULE_API_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/dialysis_base_schedule';
+        const BASE_SCHEDULE_RECORD_ID = '1'; // We will always use the record with id=1
+        // --- CHANGE END ---
+
+        const SHIFTS = ['早班', '午班', '晚班'];
+        const bedLayout = [ 1,2,3,5,6,7,8,9,11,12,13,15,16,17,18,19,21,22,23,25,26,27,28,29, 31,32,33,35,36,37,38,39,51,52,53,55,56,57,58,59,61,62,63,65 ].sort((a, b) => a - b);
+        
+        let allOpdPatients = [];
+        let baseSchedule = {}; // { "slotId": "patientId", ... }
+        let dialogState = {
+            targetSlotId: null,
+            selectedPatientId: null,
+        };
+
+        const grid = document.getElementById('schedule-grid');
+        const saveBtn = document.getElementById('save-btn');
+        const statusIndicator = document.getElementById('status-indicator');
+        const dialog = document.getElementById('patient-select-dialog');
+        const dialogTitle = document.getElementById('dialog-title');
+        const patientSearchInput = document.getElementById('patient-search');
+        const patientListContainer = document.getElementById('patient-list-container');
+        const dialogConfirmBtn = document.getElementById('dialog-confirm-btn');
+        const dialogCancelBtn = document.getElementById('dialog-cancel-btn');
+
+        function setStatus(message, type) {
+            statusIndicator.textContent = message;
+            statusIndicator.className = `status-indicator ${type}`;
+        }
+
+        function generateLayout() {
+            grid.innerHTML = '';
+            bedLayout.forEach(bedNum => {
+                const card = document.createElement('div');
+                card.className = 'bed-card';
+                let shiftsHtml = '';
+                SHIFTS.forEach((shift, shiftIndex) => {
+                    const slotId = `${bedNum}-${shiftIndex}`;
+                    shiftsHtml += `
+                        <div class="shift-slot" data-slot-id="${slotId}">
+                            <span class="shift-label">${shift}</span>
+                            <div class="patient-cell" data-action="select-patient">點此排入</div>
+                            <button class="action-btn" data-action="clear-patient" style="visibility: hidden;">×</button>
+                        </div>
+                    `;
+                });
+                card.innerHTML = `
+                    <div class="bed-header">床號 ${bedNum}</div>
+                    ${shiftsHtml}
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function populateSchedule() {
+            grid.querySelectorAll('.shift-slot').forEach(slot => {
+                const slotId = slot.dataset.slotId;
+                const patientId = baseSchedule[slotId];
+                const patientCell = slot.querySelector('.patient-cell');
+                const clearBtn = slot.querySelector('.action-btn');
+
+                if (patientId) {
+                    const patient = allOpdPatients.find(p => p.id === patientId);
+                    if (patient) {
+                        patientCell.textContent = patient.name;
+                        patientCell.classList.add('filled');
+                        clearBtn.style.visibility = 'visible';
+                    } else {
+                        patientCell.textContent = `[病人ID:${patientId}不存在]`;
+                        patientCell.classList.add('filled');
+                        patientCell.style.color = 'red';
+                        clearBtn.style.visibility = 'visible';
+                    }
+                } else {
+                    patientCell.textContent = '點此排入';
+                    patientCell.classList.remove('filled');
+                    patientCell.style.color = '';
+                    clearBtn.style.visibility = 'hidden';
+                }
+            });
+        }
+
+        async function loadAllData() {
+            setStatus('讀取中...', 'loading');
+            try {
+                const [patients, baseScheduleRes] = await Promise.all([
+                    patientsApi.fetchAll(),
+                    fetch(`${BASE_SCHEDULE_API_URL}/${BASE_SCHEDULE_RECORD_ID}`).then(res => res.ok ? res.json() : null)
+                ]);
+
+                allOpdPatients = patients.filter(p => p.status === 'opd' && !p.isDeleted);
+                if (baseScheduleRes) {
+                    baseSchedule = baseScheduleRes.scheduleData || {};
+                }
+                
+                populateSchedule();
+                setStatus('資料已載入', 'saved');
+            } catch (error) {
+                console.error("載入資料失敗:", error);
+                setStatus('載入失敗', 'error');
+                alert(`載入資料失敗: ${error.message}`);
+            }
+        }
+
+        async function saveChanges() {
+            saveBtn.disabled = true;
+            setStatus('儲存中...', 'loading');
+            try {
+                const response = await fetch(`${BASE_SCHEDULE_API_URL}/${BASE_SCHEDULE_RECORD_ID}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scheduleData: baseSchedule })
+                });
+                if (!response.ok) {
+                    // If record doesn't exist, try to create it
+                    if (response.status === 404) {
+                        const createResponse = await fetch(BASE_SCHEDULE_API_URL, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: BASE_SCHEDULE_RECORD_ID, scheduleData: baseSchedule })
+                        });
+                         if (!createResponse.ok) throw new Error('建立新記錄失敗');
+                    } else {
+                        throw new Error(`儲存失敗，狀態碼: ${response.status}`);
+                    }
+                }
+                setStatus('儲存成功！', 'saved');
+            } catch (error) {
+                console.error("儲存失敗:", error);
+                setStatus('儲存失敗', 'error');
+                alert(`儲存失敗: ${error.message}`);
+            }
+        }
+        
+        function openPatientDialog(slotId) {
+            dialogState.targetSlotId = slotId;
+            dialogState.selectedPatientId = null;
+            dialogConfirmBtn.disabled = true;
+            patientSearchInput.value = '';
+            
+            const [bed, shift] = slotId.split('-');
+            dialogTitle.textContent = `為 床號 ${bed} - ${SHIFTS[shift]} 選擇病人`;
+
+            renderPatientListInDialog();
+            dialog.showModal();
+        }
+
+        function renderPatientListInDialog(searchTerm = '') {
+            const term = searchTerm.toLowerCase();
+            const patientsToShow = allOpdPatients.filter(p => 
+                !term || p.name.toLowerCase().includes(term) || (p.medicalRecordNumber && p.medicalRecordNumber.includes(term))
+            );
+            
+            if (patientsToShow.length === 0) {
+                patientListContainer.innerHTML = `<div style="padding: 20px; text-align:center; color: #888;">無符合條件的門診病人</div>`;
+                return;
+            }
+
+            patientListContainer.innerHTML = patientsToShow.map(p => `
+                <div class="patient-list-item" data-patient-id="${p.id}">
+                    <span>${p.name} (${p.medicalRecordNumber || 'N/A'})</span>
+                    <span>${p.frequency || ''}</span>
+                </div>
+            `).join('');
+        }
+
+        function handleGridClick(e) {
+            const target = e.target;
+            const slot = target.closest('.shift-slot');
+            if (!slot) return;
+            
+            const slotId = slot.dataset.slotId;
+            const action = target.dataset.action;
+
+            if (action === 'select-patient') {
+                openPatientDialog(slotId);
+            } else if (action === 'clear-patient') {
+                if (confirm('確定要從常規表中移除這位病人嗎？')) {
+                    delete baseSchedule[slotId];
+                    populateSchedule();
+                    saveBtn.disabled = false;
+                    setStatus('有未儲存的變更', 'unsaved');
+                }
+            }
+        }
+        
+        // --- Initialize ---
+        generateLayout();
+        loadAllData();
+
+        // --- Event Listeners ---
+        grid.addEventListener('click', handleGridClick);
+
+        patientListContainer.addEventListener('click', e => {
+            const item = e.target.closest('.patient-list-item');
+            if (item) {
+                const previouslySelected = patientListContainer.querySelector('.selected');
+                if (previouslySelected) previouslySelected.classList.remove('selected');
+                item.classList.add('selected');
+                dialogState.selectedPatientId = item.dataset.patientId;
+                dialogConfirmBtn.disabled = false;
+            }
+        });
+
+        patientSearchInput.addEventListener('input', () => renderPatientListInDialog(patientSearchInput.value));
+
+        dialogConfirmBtn.addEventListener('click', () => {
+            if (dialogState.selectedPatientId && dialogState.targetSlotId) {
+                baseSchedule[dialogState.targetSlotId] = dialogState.selectedPatientId;
+                populateSchedule();
+                saveBtn.disabled = false;
+                setStatus('有未儲存的變更', 'unsaved');
+                dialog.close();
+            }
+        });
+
+        dialogCancelBtn.addEventListener('click', () => dialog.close());
+        saveBtn.addEventListener('click', saveChanges);
+
+    });
+    </script>
+</body>
+</html>
