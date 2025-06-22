@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>每日排程表 (V7.1 - 精細統計版)</title>
+    <title>每日排程表 (V7.2 - 終極穩定版)</title>
     <style>
         :root {
             --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
@@ -29,7 +29,7 @@
         .aisle { writing-mode: vertical-lr; text-align: center; padding: 20px; background-color: #dcdcdc; border-radius: 8px; font-size: 1.5em; letter-spacing: 0.5em; display: flex; align-items: center; justify-content: center; }
         .left-wing, .right-wing { display: flex; flex-direction: column; gap: 10px; }
         .bed-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-        .bed { border: 1px solid #ccc; border-radius: 5px; overflow: hidden; background-color: #fff; }
+        .bed, .nursing-station, .peripheral-bed { border: 1px solid #ccc; border-radius: 5px; overflow: hidden; background-color: #fff; }
         .bed-header { background-color: #e3f2fd; color: #0d47a1; font-weight: bold; padding: 5px; text-align: center; }
         .bed.hepatitis .bed-header { background-color: var(--hepatitis-bg); color: #af8203; }
         .shift-row, .peripheral-shift-row { display: grid; align-items: stretch; border-top: 1px solid #e0e0e0; position: relative; }
@@ -125,7 +125,7 @@
         </div>
     </div>
     <dialog id="patient-select-dialog">
-        <!-- Dialog structure is the same as weekly_view -->
+        <!-- Dialog for patient selection would be added here if needed -->
     </dialog>
 
     <script src="api_manager.js"></script>
@@ -153,7 +153,7 @@
         const aisleSideBeds = [1, 7, 8, 15, 16, 22, 23, 29, 31, 36, 37, 53, 55, 61, 62, 65];
         const hepatitisBeds = ['空', 31, 32, 33, 35, 36];
         const peripheralBedCount = 6;
-
+        
         const formatDate = (date) => { const year = date.getFullYear(); const month = (date.getMonth() + 1).toString().padStart(2, '0'); const day = date.getDate().toString().padStart(2, '0'); return `${year}-${month}-${day}`; };
         const setStatus = (message, type) => { statusIndicator.textContent = message; statusIndicator.className = `status-indicator ${type}`; };
         const printSchedule = () => window.print();
@@ -176,15 +176,13 @@
         function generateWingLayout(container, rows, wingClass) { container.innerHTML = ''; rows.forEach(rowBeds => { const rowDiv = document.createElement('div'); rowDiv.className = 'bed-row'; rowBeds.forEach(bedNumber => { rowDiv.appendChild(createBedElement(bedNumber, hepatitisBeds.includes(bedNumber), aisleSideBeds.includes(bedNumber), wingClass)); }); container.appendChild(rowDiv); }); }
 
         function generateLayout() {
-            const leftWing = document.getElementById('left-wing');
-            const rightWing = document.getElementById('right-wing');
-            const peripheralContainer = document.getElementById('peripheral-bed-container');
+            const leftWing = document.getElementById('left-wing'); const rightWing = document.getElementById('right-wing'); const peripheralContainer = document.getElementById('peripheral-bed-container');
             generateWingLayout(leftWing, layoutData.leftWingRows, 'left-wing-bed');
             generateWingLayout(rightWing, layoutData.rightWingRows, 'right-wing-bed');
             const n = document.createElement('div'); n.className = 'bed-row'; n.innerHTML = '<div class="nursing-station">護理站</div>'; leftWing.appendChild(n);
             peripheralContainer.innerHTML = ''; for (let i = 1; i <= peripheralBedCount; i++) { peripheralContainer.appendChild(createPeripheralBedElement(i)); }
         }
-        
+
         function clearBoardUi() {
             document.querySelectorAll('.nurse-team-select').forEach(s => { s.value = ''; s.title=''; });
             document.querySelectorAll('div[contenteditable="true"]').forEach(d => d.textContent = '');
@@ -214,7 +212,7 @@
             if (!patientNameEl || !patientNameEl.textContent) return;
             const patientName = patientNameEl.textContent.trim();
             const patient = allPatients.find(p => p.name === patientName);
-            patientNameEl.className = 'patient-name'; // Reset classes
+            patientNameEl.className = 'patient-name';
             if (!patient) return;
             if (patient.status === 'ipd') { patientNameEl.classList.add('status-ipd'); } 
             else { patientNameEl.classList.add('status-opd'); }
@@ -314,6 +312,7 @@
 
         function collectDataFromUI() {
             const scheduleData = {};
+            const patientNameToId = new Map(allPatients.map(p => [p.name, p.id]));
             document.querySelectorAll('.shift-row, .peripheral-shift-row').forEach(row => {
                 const id = row.dataset.shiftId;
                 const patientId = row.querySelector('.patient-cell').dataset.patientId;
@@ -329,7 +328,7 @@
             });
             return scheduleData;
         }
-
+        
         async function saveDataToCloud() {
             saveBtn.disabled = true;
             setStatus('儲存中...', 'loading');
@@ -354,7 +353,6 @@
                         currentRecord = await schedulesApi.save(dataToSave);
                     }
                 }
-                
                 hasUnsavedChanges = false;
                 setStatus('儲存成功！', 'saved');
                 updateSaveButtonState();
@@ -369,7 +367,6 @@
             const row = document.querySelector(`[data-shift-id="${shiftId}"]`);
             if (!row) return;
             const patientCell = row.querySelector('.patient-cell');
-            
             if (patientId) {
                 const patient = allPatients.find(p => p.id === patientId);
                 if (patient) {
@@ -449,7 +446,7 @@
                 }
             });
         }
-        
+
         function showMemoReminders(memos) {
             if (!memos || memos.length === 0) return;
             const todayStr = formatDate(currentDate);
@@ -474,13 +471,6 @@
             });
         }
         
-        function changeDate(days) {
-            if (hasUnsavedChanges && !confirm('您有未儲存的變更，確定要切換日期嗎？所有變更將會遺失。')) return;
-            currentDate.setDate(currentDate.getDate() + days);
-            updateDateDisplay();
-            loadDataForDay(formatDate(currentDate));
-        }
-        
         function updateDateDisplay() {
             const dateStr = formatDate(currentDate);
             document.getElementById('current-date-display').textContent = dateStr;
@@ -488,6 +478,13 @@
             document.getElementById('weekday-display').textContent = weekdays[currentDate.getDay()];
         }
         
+        function changeDate(days) {
+            if (hasUnsavedChanges && !confirm('您有未儲存的變更，確定要切換日期嗎？所有變更將會遺失。')) return;
+            currentDate.setDate(currentDate.getDate() + days);
+            updateDateDisplay();
+            loadDataForDay(formatDate(currentDate));
+        }
+
         function updateSaveButtonState() {
             saveBtn.disabled = !hasUnsavedChanges;
         }
@@ -498,24 +495,7 @@
             document.getElementById('today-btn').addEventListener('click', () => { if (hasUnsavedChanges && !confirm('您有未儲存的變更，確定要切換日期嗎？')) return; currentDate = new Date(); updateDateDisplay(); loadDataForDay(formatDate(currentDate)); });
             saveBtn.addEventListener('click', saveDataToCloud);
             document.getElementById('print-btn').addEventListener('click', printSchedule);
-            document.getElementById('clear-all-btn').addEventListener('click', () => {
-                if (currentRecord) {
-                    if (confirm("偵測到本日雲端有排程資料，您要一併刪除嗎？\n\n- 按 [確定] 將會刪除雲端資料並清空畫面。\n- 按 [取消] 將只會清空目前畫面（下次載入時會重新同步）。")) {
-                        deleteDailyRecord().then(() => {
-                            clearBoardUi();
-                            setStatus('畫面已清空，雲端記錄已刪除', 'saved');
-                        });
-                    } else {
-                        clearBoardUi();
-                        setStatus('畫面已清空，雲端資料未變動', 'unsaved');
-                    }
-                } else {
-                    if (confirm('確定要清除畫面上的所有資料嗎？')) {
-                        clearBoardUi();
-                        setChange();
-                    }
-                }
-            });
+            document.getElementById('clear-all-btn').addEventListener('click', () => { if (confirm('確定要清空本日所有排班嗎？此操作需儲存後才會生效。')) { clearBoardUi(); setChange(); } });
             document.addEventListener('input', (e) => {
                 setChange();
                 if (e.target.matches('.nurse-team-select')) {
@@ -534,9 +514,16 @@
                     renderInpatientList();
                 }
             });
-            setupDragAndDrop();
         }
         
+        function initialize() {
+            generateLayout();
+            updateDateDisplay();
+            setupEventListeners();
+            setupDragAndDrop();
+            loadDataForDay(formatDate(currentDate));
+        }
+
         initialize();
     });
     </script>
