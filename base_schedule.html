@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>常規門診週範本設定</title>
+    <title>常規門診週範本設定 (V2.1 - 最終潔淨版)</title>
     <style>
         :root {
             --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
@@ -34,6 +34,7 @@
         .schedule-slot:not(.filled):hover { background-color: #e0e0e0; }
         .schedule-slot.filled { cursor: pointer; background-color: var(--green-bg); }
         .slot-patient-name { font-weight: bold; }
+        .disease-tag-small { display: inline-block; padding: 1px 5px; font-size: 0.8em; font-weight: bold; color: var(--danger-color); border: 1px solid var(--danger-color); border-radius: 4px; }
         dialog { border: 1px solid #ccc; border-radius: 8px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 90%; max-width: 600px; }
         dialog::backdrop { background-color: rgba(0,0,0,0.5); }
         dialog h3 { margin-top: 0; }
@@ -43,7 +44,12 @@
         .dialog-filters input, .dialog-filters select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
         #patient-list-container { max-height: 300px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; }
         .patient-list-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+        .patient-list-item:hover { background-color: #f0f0f0; }
         .patient-list-item.selected { background-color: var(--blue-bg); font-weight: bold; }
+        .patient-main-info { display: flex; flex-direction: column; }
+        .patient-name { font-size: 1.1em; }
+        .patient-mrn { font-size: 0.85em; color: #6c757d; }
+        .patient-meta { display: flex; align-items: center; gap: 8px; font-size: 0.9em; }
         .modal-footer { margin-top: 20px; text-align: right; }
         .radio-group { display: flex; align-items: center; gap: 8px; }
         #dialog-confirm-btn:disabled { background-color: #ccc; border-color: #ccc; cursor: not-allowed; }
@@ -89,8 +95,14 @@
     <script>
     document.addEventListener('DOMContentLoaded', () => {
         const patientsApi = ApiManager('patients');
-        const BASE_SCHEDULE_API_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/dialysis_base_schedule';
-        const BASE_SCHEDULE_RECORD_ID = '1';
+        const BASE_SCHEDULE_APIS = {
+            0: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_mon',
+            1: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_tue',
+            2: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_wed',
+            3: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_thu',
+            4: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_fri',
+            5: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_sat',
+        };
         
         const SHIFTS = ['早班', '午班', '晚班'];
         const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
@@ -101,19 +113,13 @@
         const FREQ_MAP_TO_DAY_INDEX = { '一三五': [0, 2, 4], '二四六': [1, 3, 5], '一四': [0, 3], '二五': [1, 4], '三六': [2, 5], '一五': [0, 4], '二六': [1, 5] };
 
         let allOpdPatients = [];
-        let baseSchedule = new Map(); // Use Map: "slotId" -> patientId
+        let baseSchedule = new Map(); // Key: "bed-shift-day", Value: patientId
         let hasUnsavedChanges = false;
         let dialogState = { targetSlotId: null, selectedPatientId: null };
 
         const saveBtn = document.getElementById('save-changes-btn');
         const statusText = document.getElementById('status-text');
         
-        async function initialize() {
-            renderWeeklyScheduleTableFrame();
-            setupEventListeners();
-            await loadAllData();
-        }
-
         function setChange() {
             hasUnsavedChanges = true;
             statusText.textContent = '有未儲存的變更';
@@ -129,9 +135,8 @@
             head.innerHTML = headerHtml;
             let bodyHtml = '';
             bedLayout.forEach(bedNumber => {
-                const isHepatitis = hepatitisBeds.includes(bedNumber);
+                const rowClass = hepatitisBeds.includes(bedNumber) ? 'hepatitis-bed' : '';
                 SHIFTS.forEach((shift, shiftIndex) => {
-                    const rowClass = isHepatitis ? 'hepatitis-bed' : '';
                     bodyHtml += `<tr class="${rowClass}">`;
                     if (shiftIndex === 0) bodyHtml += `<td rowspan="3">${bedNumber}號床</td>`;
                     bodyHtml += `<td>${shift}</td>`;
@@ -150,18 +155,20 @@
             saveBtn.disabled = true;
             statusText.textContent = '讀取中...';
             try {
-                const [patients, baseScheduleRes] = await Promise.all([
+                const [patients, ...dailyBaseRecords] = await Promise.all([
                     patientsApi.fetchAll(),
-                    fetch(BASE_SCHEDULE_API_URL).then(res => res.ok ? res.json() : [])
+                    ...Object.values(BASE_SCHEDULE_APIS).map(url => fetch(url).then(res => res.ok ? res.json() : []))
                 ]);
                 allOpdPatients = patients.filter(p => p.status === 'opd' && !p.isDeleted);
+                
                 baseSchedule.clear();
-                if (baseScheduleRes && baseScheduleRes.length > 0) {
-                    const scheduleData = baseScheduleRes[0].scheduleData || {};
-                    Object.entries(scheduleData).forEach(([slotId, patientId]) => {
-                        baseSchedule.set(slotId, patientId);
+                dailyBaseRecords.forEach((records, dayIndex) => {
+                    records.forEach(record => {
+                        const fullSlotId = `${record.slotId}-${dayIndex}`;
+                        baseSchedule.set(fullSlotId, record.patientId);
                     });
-                }
+                });
+                
                 populateScheduleData();
                 statusText.textContent = '常規模板已載入';
             } catch (error) { 
@@ -184,6 +191,7 @@
                         slot.classList.add('filled');
                         slot.innerHTML = `<div class="slot-patient-name">${patient.name}</div>`;
                     } else {
+                        slot.classList.add('filled');
                         slot.innerHTML = `<div class="slot-patient-name" style="color:red;">ID不存在</div>`;
                     }
                 }
@@ -194,28 +202,40 @@
             saveBtn.disabled = true;
             statusText.textContent = '儲存中...';
             try {
-                const dataToSave = { scheduleData: Object.fromEntries(baseSchedule) };
-                const response = await fetch(`${BASE_SCHEDULE_API_URL}/${BASE_SCHEDULE_RECORD_ID}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(dataToSave)
+                const clearPromises = Object.values(BASE_SCHEDULE_APIS).map(async url => {
+                    try {
+                        const records = await fetch(url).then(res => res.json());
+                        return Promise.all(records.map(r => fetch(`${url}/${r.id}`, { method: 'DELETE' })));
+                    } catch (e) { return Promise.resolve(); } // Ignore if clearing fails (e.g., empty resource)
                 });
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        const createResponse = await fetch(BASE_SCHEDULE_API_URL, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(dataToSave)
-                        });
-                        if (!createResponse.ok) throw new Error('建立新記錄失敗');
-                    } else { throw new Error(`儲存失敗，狀態碼: ${response.status}`); }
-                }
+                await Promise.all(clearPromises);
+
+                const newScheduleByDay = {};
+                baseSchedule.forEach((patientId, fullSlotId) => {
+                    const [bed, shiftIndex, dayIndex] = fullSlotId.split('-');
+                    const slotId = `${bed}-${shiftIndex}`;
+                    if (!newScheduleByDay[dayIndex]) newScheduleByDay[dayIndex] = [];
+                    newScheduleByDay[dayIndex].push({ slotId, patientId });
+                });
+
+                const savePromises = Object.entries(newScheduleByDay).map(([dayIndex, records]) => {
+                    const url = BASE_SCHEDULE_APIS[dayIndex];
+                    return Promise.all(records.map(record => fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(record)
+                    })));
+                });
+                
+                await Promise.all(savePromises);
+
                 hasUnsavedChanges = false;
-                setStatus('範本儲存成功！', 'saved');
+                statusText.textContent = '範本儲存成功！';
+                saveBtn.disabled = true;
                 alert('常規門診範本已成功儲存！');
             } catch (error) {
                 console.error("儲存失敗:", error);
-                setStatus('儲存失敗', 'error');
+                statusText.textContent = '儲存失敗';
                 alert(`儲存失敗: ${error.message}`);
                 saveBtn.disabled = false;
             }
@@ -229,8 +249,10 @@
             dialog.querySelector('#patient-search').value = '';
             dialog.querySelector('#freq-filter').value = '';
             dialog.querySelector('#disease-filter').value = '';
+            
             const [bed, shift, day] = slotId.split('-');
             dialog.querySelector('#dialog-title').textContent = `為 床號 ${bed} - ${SHIFTS[shift]} (${WEEKDAYS[day]}) 選擇病人`;
+
             renderPatientListInDialog();
             dialog.showModal();
         }
@@ -286,7 +308,7 @@
                 openPatientDialog(slotId);
             }
         }
-        
+
         function handleAddSchedule() {
             const patientId = dialogState.selectedPatientId;
             if (!patientId) return;
@@ -295,6 +317,7 @@
             const fillType = document.querySelector('input[name="fill-type"]:checked').value;
             const freq = patient.frequency;
             const [bed, shiftIndex] = slotId.split('-');
+            
             if (fillType === 'frequency' && freq && FREQ_MAP_TO_DAY_INDEX[freq]) {
                 const dayIndexes = FREQ_MAP_TO_DAY_INDEX[freq];
                 dayIndexes.forEach(dayIndex => {
@@ -308,7 +331,14 @@
             populateScheduleData();
             document.getElementById('patient-select-dialog').close();
         }
-
+        
+        function setupFilters() {
+            const freqFilter = document.getElementById('freq-filter');
+            const diseaseFilter = document.getElementById('disease-filter');
+            freqFilter.innerHTML = '<option value="">全部頻率</option>' + FREQUENCIES.map(f => `<option value="${f}">${f}</option>`).join('');
+            diseaseFilter.innerHTML = '<option value="">全部疾病</option>' + DISEASES.map(d => `<option value="${d}">${d}</option>`).join('');
+        }
+        
         function setupEventListeners() {
             document.getElementById('weekly-schedule-body').addEventListener('click', handleGridClick);
             const dialog = document.getElementById('patient-select-dialog');
@@ -334,13 +364,6 @@
             confirmBtn.addEventListener('click', handleAddSchedule);
             cancelBtn.addEventListener('click', () => dialog.close());
             document.getElementById('save-changes-btn').addEventListener('click', saveChanges);
-        }
-
-        function setupFilters() {
-            const freqFilter = document.getElementById('freq-filter');
-            const diseaseFilter = document.getElementById('disease-filter');
-            freqFilter.innerHTML = '<option value="">全部頻率</option>' + FREQUENCIES.map(f => `<option value="${f}">${f}</option>`).join('');
-            diseaseFilter.innerHTML = '<option value="">全部疾病</option>' + DISEASES.map(d => `<option value="${d}">${d}</option>`).join('');
         }
 
         initialize();
