@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>每日排程表 (V7.2 - 終極穩定版)</title>
+    <title>每日排程表 (V7.2 - 最終穩定版)</title>
     <style>
         :root {
             --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
@@ -124,10 +124,7 @@
             </aside>
         </div>
     </div>
-    <dialog id="patient-select-dialog">
-        <!-- Dialog for patient selection would be added here if needed -->
-    </dialog>
-
+    
     <script src="api_manager.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -312,7 +309,6 @@
 
         function collectDataFromUI() {
             const scheduleData = {};
-            const patientNameToId = new Map(allPatients.map(p => [p.name, p.id]));
             document.querySelectorAll('.shift-row, .peripheral-shift-row').forEach(row => {
                 const id = row.dataset.shiftId;
                 const patientId = row.querySelector('.patient-cell').dataset.patientId;
@@ -328,7 +324,7 @@
             });
             return scheduleData;
         }
-        
+
         async function saveDataToCloud() {
             saveBtn.disabled = true;
             setStatus('儲存中...', 'loading');
@@ -488,6 +484,45 @@
         function updateSaveButtonState() {
             saveBtn.disabled = !hasUnsavedChanges;
         }
+        
+        function updateNurseStats() {
+            const statsList = document.getElementById('nurse-stats-list');
+            const patientMap = new Map(allPatients.map(p => [p.id, p]));
+            const counts = {};
+
+            document.querySelectorAll('.shift-row, .peripheral-shift-row').forEach(row => {
+                const nurse = row.querySelector('.nurse-team-select').value;
+                const patientId = row.querySelector('.patient-cell').dataset.patientId;
+
+                if (nurse && patientId) {
+                    if (!counts[nurse]) {
+                        counts[nurse] = { total: 0, ipd: 0, opd: 0 };
+                    }
+                    counts[nurse].total++;
+                    const patient = patientMap.get(patientId);
+                    if (patient) {
+                        if (patient.status === 'ipd') {
+                            counts[nurse].ipd++;
+                        } else {
+                            counts[nurse].opd++;
+                        }
+                    }
+                }
+            });
+            
+            statsList.innerHTML = Object.entries(counts)
+                .sort((a,b) => a[0].localeCompare(b[0], 'zh-Hant'))
+                .map(([team, data]) => `
+                    <li>
+                        <span class="team-name">${team}組</span>
+                        <div class="team-counts">
+                            <span class="count-ipd" title="住院">住: ${data.ipd}</span>
+                            <span class="count-opd" title="門診">門: ${data.opd}</span>
+                            <span class="count-total" title="總計">共: ${data.total}</span>
+                        </div>
+                    </li>
+                `).join('');
+        }
 
         function setupEventListeners() {
             document.getElementById('prev-date-btn').addEventListener('click', () => changeDate(-1));
@@ -516,12 +551,12 @@
             });
         }
         
-        function initialize() {
+        async function initialize() {
             generateLayout();
             updateDateDisplay();
             setupEventListeners();
             setupDragAndDrop();
-            loadDataForDay(formatDate(currentDate));
+            await loadDataForDay(formatDate(currentDate));
         }
 
         initialize();
