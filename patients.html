@@ -3,9 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>透析病人管理系統 (V4.2 - Tab修正)</title>
+    <title>透析病人管理系統 (V4.3 - UI優化)</title>
     <style>
-        :root { --green-bg: #e8f5e9; --green-text: #2e7d32; --blue-bg: #e3f2fd;  --blue-text: #1565c0; --orange-bg: #fff3e0; --orange-text: #ef6c00; --grey-bg: #f5f5f5; --grey-text: #616161; --red-text: #c62828; }
+        :root { 
+            --green-bg: #e8f5e9; --green-text: #2e7d32; 
+            --blue-bg: #e3f2fd;  --blue-text: #1565c0; 
+            --orange-bg: #fff3e0; --orange-text: #ef6c00; 
+            --grey-bg: #f5f5f5; --grey-text: #616161; 
+            --red-text: #c62828;
+            --primary-color: #007bff;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --info-color: #17a2b8;
+        }
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f9f9f9; margin: 0; padding: 20px; }
         .container { max-width: 1400px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .tabs { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 20px; }
@@ -15,11 +26,16 @@
         .tab-content { display: none; }
         .tab-content.active { display: block; }
         .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 15px; }
-        .toolbar button { padding: 8px 15px; font-size: 1em; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .toolbar button { padding: 8px 15px; font-size: 1em; background-color: var(--primary-color); color: white; border: none; border-radius: 5px; cursor: pointer; }
         .toolbar button:hover { background-color: #0056b3; }
         .toolbar .search-group { display: flex; gap: 5px; }
         .toolbar input { padding: 8px; border: 1px solid #ccc; border-radius: 5px; }
-        .stats-area { display: flex; gap: 20px; font-size: 0.9em; }
+        .stats-area { display: flex; gap: 15px; font-size: 0.9em; align-items: center; }
+        .stat-item { padding: 4px 8px; border-radius: 12px; color: white; font-weight: bold; }
+        .stat-item.total { background-color: #6c757d; }
+        .stat-item.freq-135 { background-color: #28a745; }
+        .stat-item.freq-246 { background-color: #17a2b8; }
+        .stat-item.freq-other { background-color: #ffc107; color: #333; }
         .patient-table { width: 100%; border-collapse: collapse; table-layout: auto; }
         .patient-table th, .patient-table td { border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap; }
         .patient-table td:nth-child(1), .patient-table#ipd-table-body td:nth-child(8), .patient-table#opd-table-body td:nth-child(7) { white-space: normal; }
@@ -31,7 +47,11 @@
         .patient-table tr.status-biweekly { background-color: var(--orange-bg); }
         .patient-table tr.status-deleted { background-color: var(--grey-bg); color: var(--grey-text); }
         .disease-tag { display: inline-block; margin-left: 8px; padding: 2px 6px; font-size: 0.8em; font-weight: bold; color: var(--red-text); border: 1px solid var(--red-text); border-radius: 4px; }
-        .action-buttons button { margin-right: 5px; padding: 4px 8px; font-size: 0.9em; border-radius: 3px; border: 1px solid #ccc; cursor: pointer; }
+        .action-buttons button { margin-right: 5px; padding: 5px 10px; font-size: 0.9em; border-radius: 4px; border: none; cursor: pointer; color: white; }
+        .btn-edit { background-color: var(--primary-color); }
+        .btn-transfer { background-color: var(--info-color); }
+        .btn-delete { background-color: var(--danger-color); }
+        .btn-restore { background-color: var(--success-color); }
         .table-wrapper { max-height: 60vh; overflow-y: auto; }
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
         .modal-content { background-color: #fefefe; padding: 20px; border: 1px solid #888; width: 90%; max-width: 700px; border-radius: 8px; }
@@ -126,14 +146,11 @@
         let allPatients = [];
         let currentSort = { column: 'createdAt', order: 'desc' };
         
-        // --- CHANGE START: Define all DOM element constants here ---
         const tabButtons = document.querySelectorAll('.tab-button');
         const tabContents = document.querySelectorAll('.tab-content');
         const modal = document.getElementById('patient-modal');
         const modalTitle = document.getElementById('modal-title');
         const modalFormContent = document.getElementById('modal-form-content');
-        const deleteDialog = document.getElementById('delete-reason-dialog');
-        // --- CHANGE END ---
         
         const formatDate = (isoString) => isoString ? new Date(isoString).toLocaleDateString() : '';
 
@@ -198,11 +215,24 @@
                 const rowClass = getRowClass(p);
                 let rowContent = '';
                 if (type === 'ipd') {
-                    rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.isFirstDialysis ? '✓' : ''}</td><td>${p.isDiscontinued ? '✓' : ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td><td class="action-buttons"><button data-action="edit" data-id="${p.id}">編輯</button><button data-action="transfer-opd" data-id="${p.id}">轉門診</button><button data-action="delete" data-id="${p.id}">刪除</button></td>`;
+                    rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.isFirstDialysis ? '✓' : ''}</td><td>${p.isDiscontinued ? '✓' : ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td>
+                                  <td class="action-buttons">
+                                      <button class="btn-edit" data-action="edit" data-id="${p.id}">編輯</button>
+                                      <button class="btn-transfer" data-action="transfer-opd" data-id="${p.id}">轉門診</button>
+                                      <button class="btn-delete" data-action="delete" data-id="${p.id}">刪除</button>
+                                  </td>`;
                 } else if (type === 'opd') {
-                    rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.vascAccess || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td><td class="action-buttons"><button data-action="edit" data-id="${p.id}">編輯</button><button data-action="transfer-ipd" data-id="${p.id}">轉住院</button><button data-action="delete" data-id="${p.id}">刪除</button></td>`;
+                    rowContent = `<td>${p.name || ''}${generateDiseaseTags(p.diseases)}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.physician || ''}</td><td>${p.frequency || ''}</td><td>${p.mode || ''}</td><td>${p.vascAccess || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.createdAt)}</td>
+                                  <td class="action-buttons">
+                                      <button class="btn-edit" data-action="edit" data-id="${p.id}">編輯</button>
+                                      <button class="btn-transfer" data-action="transfer-ipd" data-id="${p.id}">轉住院</button>
+                                      <button class="btn-delete" data-action="delete" data-id="${p.id}">刪除</button>
+                                  </td>`;
                 } else {
-                    rowContent = `<td>${p.name || ''}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.originalStatus === 'ipd' ? '住院' : '門診'}</td><td>${p.deleteReason || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.deletedAt)}</td><td><button data-action="restore" data-id="${p.id}">復原</button></td>`;
+                    rowContent = `<td>${p.name || ''}</td><td>${p.medicalRecordNumber || ''}</td><td>${p.originalStatus === 'ipd' ? '住院' : '門診'}</td><td>${p.deleteReason || ''}</td><td>${p.remarks || ''}</td><td>${formatDate(p.deletedAt)}</td>
+                                  <td class="action-buttons">
+                                      <button class="btn-restore" data-action="restore" data-id="${p.id}">復原</button>
+                                  </td>`;
                 }
                 return `<tr class="${rowClass}">${rowContent}</tr>`;
             }).join('');
@@ -345,6 +375,7 @@
                     }
                 } 
                 deleteDialog.close(); 
+                optionsContainer.removeEventListener('click', handleReasonSelection);
              }; 
              optionsContainer.addEventListener('click', handleReasonSelection, { once: true }); 
              document.getElementById('delete-cancel-btn').addEventListener('click', () => deleteDialog.close(), { once: true }); 
@@ -359,12 +390,12 @@
             }
             const headers = ['姓名', '病歷號', '原狀態', '刪除原因', '刪除日期', '備註'];
             const rows = deletedPatients.map(p => [
-                p.name,
-                p.medicalRecordNumber,
-                p.originalStatus === 'ipd' ? '住院' : '門診',
-                p.deleteReason,
-                formatDate(p.deletedAt),
-                (p.remarks || '').replace(/,/g, '，') 
+                `"${p.name || ''}"`,
+                `"${p.medicalRecordNumber || ''}"`,
+                `"${p.originalStatus === 'ipd' ? '住院' : '門診'}"`,
+                `"${p.deleteReason || ''}"`,
+                `"${formatDate(p.deletedAt)}"`,
+                `"${(p.remarks || '').replace(/"/g, '""')}"`
             ]);
 
             let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
@@ -386,8 +417,43 @@
         const closeModal = () => {modal.style.display = 'none';modalFormContent.innerHTML = '';};
         const getRowClass = (p) => {if (p.isDeleted) return 'status-deleted';const biweeklyFreq = ['一四', '二五', '三六', '一五', '二六'];if (biweeklyFreq.includes(p.frequency)) return 'status-biweekly';if (p.status === 'ipd') return 'status-ipd';if (p.status === 'opd') return 'status-opd';return '';};
         const generateDiseaseTags = (d) => {if (!d || d.length === 0) return '';return d.map(tag => `<span class="disease-tag">${tag}</span>`).join('');};
-        const updateStats = () => {const ipdPatients = allPatients.filter(p => p.status === 'ipd' && !p.isDeleted);const opdPatients = allPatients.filter(p => p.status === 'opd' && !p.isDeleted);const ipdStatsDiv = document.getElementById('ipd-stats');const opdStatsDiv = document.getElementById('opd-stats');const generateStatsHTML = (patients) => {if (patients.length === 0) return '總人數: 0';const freqCounts = patients.reduce((acc, p) => {acc[p.frequency] = (acc[p.frequency] || 0) + 1;return acc;}, {});const freqString = Object.entries(freqCounts).map(([freq, count]) => `${freq || '未分類'}: ${count}人`).join(', ');return `總人數: ${patients.length} (${freqString})`;};ipdStatsDiv.innerHTML = generateStatsHTML(ipdPatients);opdStatsDiv.innerHTML = generateStatsHTML(opdPatients);};
         const handleSort = (key) => { if (currentSort.column === key) { currentSort.order = currentSort.order === 'asc' ? 'desc' : 'asc'; } else { currentSort.column = key; currentSort.order = 'asc'; } renderAllTables(); };
+        const updateStats = () => {
+            const ipdPatients = allPatients.filter(p => p.status === 'ipd' && !p.isDeleted);
+            const opdPatients = allPatients.filter(p => p.status === 'opd' && !p.isDeleted);
+            const ipdStatsDiv = document.getElementById('ipd-stats');
+            const opdStatsDiv = document.getElementById('opd-stats');
+            
+            const generateStatsHTML = (patients) => {
+                if (patients.length === 0) return '<span class="stat-item total">總人數: 0</span>';
+                
+                const freqCounts = { '135': 0, '246': 0, 'other': 0 };
+                patients.forEach(p => {
+                    if (p.frequency === '一三五') {
+                        freqCounts['135']++;
+                    } else if (p.frequency === '二四六') {
+                        freqCounts['246']++;
+                    } else {
+                        freqCounts['other']++;
+                    }
+                });
+
+                let statsHtml = `<span class="stat-item total">總人數: ${patients.length}</span>`;
+                if (freqCounts['135'] > 0) {
+                    statsHtml += `<span class="stat-item freq-135">一三五: ${freqCounts['135']}人</span>`;
+                }
+                if (freqCounts['246'] > 0) {
+                    statsHtml += `<span class="stat-item freq-246">二四六: ${freqCounts['246']}人</span>`;
+                }
+                if (freqCounts['other'] > 0) {
+                    statsHtml += `<span class="stat-item freq-other">其他: ${freqCounts['other']}人</span>`;
+                }
+                return statsHtml;
+            };
+
+            ipdStatsDiv.innerHTML = generateStatsHTML(ipdPatients);
+            opdStatsDiv.innerHTML = generateStatsHTML(opdPatients);
+        };
         
         document.querySelector('.container').addEventListener('click', (e) => {
             const target = e.target;
@@ -417,7 +483,15 @@
             }
         });
         
-        tabButtons.forEach(button => { button.addEventListener('click', (e) => { const targetTab = e.currentTarget.dataset.tab; tabButtons.forEach(btn => btn.classList.remove('active')); tabContents.forEach(content => content.classList.remove('active')); e.currentTarget.classList.add('active'); document.getElementById(targetTab).classList.add('active'); }); });
+        tabButtons.forEach(button => { 
+            button.addEventListener('click', (e) => { 
+                const targetTab = e.currentTarget.dataset.tab; 
+                tabButtons.forEach(btn => btn.classList.remove('active')); 
+                tabContents.forEach(content => content.classList.remove('active'));
+                e.currentTarget.classList.add('active'); 
+                document.getElementById(targetTab).classList.add('active'); 
+            }); 
+        });
         document.querySelector('.close-button').addEventListener('click', closeModal);
         window.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
