@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>常規門診病人床位表 (V1.1 - 完整修正版)</title>
+    <title>常規門診週範本設定 (V1.0)</title>
     <style>
         :root {
             --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
@@ -11,30 +11,31 @@
             --hepatitis-bg: #fffde7; --hepatitis-border: #fff176;
             --blue-bg: #e3f2fd;
         }
-        body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; }
-        .container { max-width: 1800px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid var(--border-color); }
-        .header h1 { margin: 0; }
-        .header button { padding: 10px 20px; font-size: 1.1em; border-radius: 5px; border: none; color: white; cursor: pointer; }
-        #save-btn { background-color: var(--success-color); }
-        #save-btn:disabled { background-color: #ccc; cursor: not-allowed; }
-        .status-indicator { font-weight: bold; margin-right: 15px; }
-        .status-indicator.loading { color: #ff9800; }
-        .status-indicator.saved { color: #4CAF50; }
-        .status-indicator.error { color: #f44336; }
-        .status-indicator.unsaved { color: #e74c3c; }
-        .schedule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; }
-        .bed-card { border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
-        .bed-header { background-color: #e9ecef; padding: 8px; font-size: 1.2em; font-weight: bold; text-align: center; }
-        .bed-card.hepatitis .bed-header { background-color: var(--hepatitis-bg); border-bottom: 1px solid var(--hepatitis-border); }
-        .shift-slot { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-top: 1px solid #f1f1f1; }
-        .shift-label { font-weight: bold; color: #555; }
-        .patient-cell { flex-grow: 1; text-align: center; padding: 8px; margin: 0 10px; border-radius: 5px; cursor: pointer; background-color: #f8f9fa; border: 1px dashed #ccc; }
-        .patient-cell.filled { background-color: var(--green-bg); border-style: solid; font-weight: bold; }
-        .patient-cell:hover { background-color: #e2e6ea; }
-        .action-btn { background: none; border: none; cursor: pointer; font-size: 1.2em; color: #888; }
-        .action-btn:hover { color: var(--danger-color); }
-        
+        body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: var(--sidebar-bg); margin: 0; padding: 20px; color: #212529; }
+        .container { max-width: 1800px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.075); }
+        .header-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 10px;}
+        .header-toolbar h1 { margin: 0; }
+        .main-actions button { border: 1px solid #ccc; border-radius: 5px; padding: 8px 12px; font-size: 1em; cursor: pointer; background-color: #fff; }
+        #save-changes-btn { background-color: var(--success-color); color: white; border-color: var(--success-color); }
+        #save-changes-btn:disabled { background-color: #ccc; border-color: #ccc; cursor: not-allowed; }
+        .status-text { font-weight: bold; color: #6c757d; margin-left: auto; margin-right: 15px; }
+        .table-wrapper { max-height: 80vh; overflow: auto; }
+        .weekly-schedule-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        .weekly-schedule-table th, .weekly-schedule-table td { border: 1px solid var(--border-color); padding: 4px; text-align: center; vertical-align: middle; height: 65px; }
+        .weekly-schedule-table thead th { background-color: #e9ecef; position: sticky; top: 0; z-index: 10; }
+        .weekly-schedule-table th:nth-child(1) { width: 80px; }
+        .weekly-schedule-table th:nth-child(2) { width: 60px; }
+        .weekly-schedule-table tbody td:nth-child(1), .weekly-schedule-table tbody td:nth-child(2) { background-color: var(--sidebar-bg); font-weight: bold; position: sticky; z-index: 5; }
+        .weekly-schedule-table tbody td:nth-child(1) { left: 0; }
+        .weekly-schedule-table tbody td:nth-child(2) { left: 80px; }
+        .hepatitis-bed td { background-color: var(--hepatitis-bg); }
+        .hepatitis-bed td:nth-child(1), .hepatitis-bed td:nth-child(2) { background-color: var(--hepatitis-bg) !important; }
+        .schedule-slot { width: 100%; height: 100%; box-sizing: border-box; border-radius: 5px; padding: 5px; cursor: pointer; transition: background-color 0.2s; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px; }
+        .schedule-slot:not(.filled):hover { background-color: #e0e0e0; }
+        .schedule-slot.filled { cursor: pointer; background-color: var(--green-bg); }
+        .slot-patient-name { font-weight: bold; }
+        .slot-patient-mode { font-size: 0.9em; color: #555; }
+        .disease-tag { color: var(--danger-color); font-weight: bold; margin-left: 5px; font-size: 0.9em; padding: 1px 4px; border: 1px solid var(--danger-color); border-radius: 4px; background-color: #fff; }
         dialog { border: 1px solid #ccc; border-radius: 8px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); width: 90%; max-width: 600px; }
         dialog::backdrop { background-color: rgba(0,0,0,0.5); }
         dialog h3 { margin-top: 0; }
@@ -44,7 +45,6 @@
         .dialog-filters input, .dialog-filters select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
         #patient-list-container { max-height: 300px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; }
         .patient-list-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
-        .patient-list-item:last-child { border-bottom: none; }
         .patient-list-item:hover { background-color: #f0f0f0; }
         .patient-list-item.selected { background-color: var(--blue-bg); font-weight: bold; }
         .patient-main-info { display: flex; flex-direction: column; }
@@ -56,22 +56,26 @@
         .modal-footer button { margin-left: 10px; }
         .radio-group { display: flex; align-items: center; gap: 8px; }
         .radio-group input { width: auto; }
+        #dialog-confirm-btn:disabled { background-color: #ccc; border-color: #ccc; cursor: not-allowed; }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>常規門診床位表</h1>
-            <div>
-                <span id="status-indicator" class="status-indicator"></span>
-                <button id="save-btn" disabled>儲存變更</button>
+        <div class="header-toolbar">
+            <h1>常規門診週範本設定</h1>
+            <div class="main-actions">
+                <span id="status-text" class="status-text"></span>
+                <button id="save-changes-btn" disabled>儲存範本</button>
             </div>
         </div>
-        <div class="schedule-grid" id="schedule-grid">
-            <!-- Bed cards will be generated here -->
+        <div class="table-wrapper">
+            <table class="weekly-schedule-table">
+                <thead id="weekly-schedule-head"></thead>
+                <tbody id="weekly-schedule-body"></tbody>
+            </table>
         </div>
     </div>
-
+    
     <dialog id="patient-select-dialog">
         <h3 id="dialog-title">選擇門診病人</h3>
         <div class="dialog-filters">
@@ -110,10 +114,17 @@
     <script>
     document.addEventListener('DOMContentLoaded', () => {
         const patientsApi = ApiManager('patients');
-        const BASE_SCHEDULE_API_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/dialysis_base_schedule';
-        const BASE_SCHEDULE_RECORD_ID = '1';
-
+        const BASE_SCHEDULE_APIS = {
+            0: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_mon',
+            1: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_tue',
+            2: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_wed',
+            3: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_thu',
+            4: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_fri',
+            5: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_sat',
+        };
+        
         const SHIFTS = ['早班', '午班', '晚班'];
+        const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
         const bedLayout = [ 1,2,3,5,6,7,8,9,11,12,13,15,16,17,18,19,21,22,23,25,26,27,28,29, 31,32,33,35,36,37,38,39,51,52,53,55,56,57,58,59,61,62,63,65 ].sort((a, b) => a - b);
         const hepatitisBeds = [31, 32, 33, 35, 36];
         const FREQUENCIES = ['一三五', '二四六', '一四', '二五', '三六', '一五', '二六', '每周一次', '臨時'];
@@ -121,158 +132,161 @@
         const FREQ_MAP_TO_DAY_INDEX = { '一三五': [0, 2, 4], '二四六': [1, 3, 5], '一四': [0, 3], '二五': [1, 4], '三六': [2, 5], '一五': [0, 4], '二六': [1, 5] };
 
         let allOpdPatients = [];
-        let baseSchedule = {};
+        let baseSchedule = new Map();
         let hasUnsavedChanges = false;
         let dialogState = { targetSlotId: null, selectedPatientId: null };
 
-        const grid = document.getElementById('schedule-grid');
-        const saveBtn = document.getElementById('save-btn');
-        const statusIndicator = document.getElementById('status-indicator');
-        const dialog = document.getElementById('patient-select-dialog');
-        const dialogTitle = document.getElementById('dialog-title');
-        const patientSearchInput = document.getElementById('patient-search');
-        const freqFilter = document.getElementById('freq-filter');
-        const diseaseFilter = document.getElementById('disease-filter');
-        const patientListContainer = document.getElementById('patient-list-container');
-        const dialogConfirmBtn = document.getElementById('dialog-confirm-btn');
-        const dialogCancelBtn = document.getElementById('dialog-cancel-btn');
-
-        function setStatus(message, type) {
-            statusIndicator.textContent = message;
-            statusIndicator.className = `status-indicator ${type}`;
-            saveBtn.disabled = !hasUnsavedChanges;
-        }
+        const saveBtn = document.getElementById('save-changes-btn');
+        const statusText = document.getElementById('status-text');
         
+        async function initialize() {
+            renderWeeklyScheduleTableFrame();
+            setupEventListeners();
+            await loadAllData();
+        }
+
         function setChange() {
             hasUnsavedChanges = true;
-            setStatus('有未儲存的變更', 'unsaved');
+            statusText.textContent = '有未儲存的變更';
+            saveBtn.disabled = false;
         }
 
-        function generateLayout() {
-            grid.innerHTML = '';
-            bedLayout.forEach(bedNum => {
-                const card = document.createElement('div');
-                card.className = 'bed-card';
-                if (hepatitisBeds.includes(bedNum)) {
-                    card.classList.add('hepatitis');
-                }
-                let shiftsHtml = '';
+        function renderWeeklyScheduleTableFrame() {
+            const head = document.getElementById('weekly-schedule-head');
+            const body = document.getElementById('weekly-schedule-body');
+            let headerHtml = '<tr><th>床位</th><th>班次</th>';
+            WEEKDAYS.forEach((day) => { headerHtml += `<th><div class="weekday">${day}</div></th>`; });
+            headerHtml += '</tr>';
+            head.innerHTML = headerHtml;
+            let bodyHtml = '';
+            bedLayout.forEach(bedNumber => {
+                const isHepatitis = hepatitisBeds.includes(bedNumber);
                 SHIFTS.forEach((shift, shiftIndex) => {
-                    const slotId = `${bedNum}-${shiftIndex}`;
-                    shiftsHtml += `
-                        <div class="shift-slot" data-slot-id="${slotId}">
-                            <span class="shift-label">${shift}</span>
-                            <div class="patient-cell" data-action="select-patient">點此排入</div>
-                            <button class="action-btn" data-action="clear-patient" style="visibility: hidden;">×</button>
-                        </div>
-                    `;
+                    const rowClass = isHepatitis ? 'hepatitis-bed' : '';
+                    bodyHtml += `<tr class="${rowClass}">`;
+                    if (shiftIndex === 0) bodyHtml += `<td rowspan="3">${bedNumber}號床</td>`;
+                    bodyHtml += `<td>${shift}</td>`;
+                    WEEKDAYS.forEach((day, dayIndex) => {
+                        const slotId = `${bedNumber}-${shiftIndex}-${dayIndex}`;
+                        bodyHtml += `<td><div class="schedule-slot" data-slot-id="${slotId}"></div></td>`;
+                    });
+                    bodyHtml += `</tr>`;
                 });
-                card.innerHTML = `<div class="bed-header">床號 ${bedNum}</div>${shiftsHtml}`;
-                grid.appendChild(card);
             });
-        }
-
-        function populateSchedule() {
-            grid.querySelectorAll('.shift-slot').forEach(slot => {
-                const slotId = slot.dataset.slotId;
-                const patientId = baseSchedule[slotId];
-                const patientCell = slot.querySelector('.patient-cell');
-                const clearBtn = slot.querySelector('.action-btn');
-
-                if (patientId) {
-                    const patient = allOpdPatients.find(p => p.id === patientId);
-                    if (patient) {
-                        patientCell.textContent = patient.name;
-                        patientCell.classList.add('filled');
-                        clearBtn.style.visibility = 'visible';
-                    } else {
-                        patientCell.textContent = `[病人ID不存在]`;
-                        patientCell.classList.add('filled');
-                        patientCell.style.color = 'red';
-                        clearBtn.style.visibility = 'visible';
-                    }
-                } else {
-                    patientCell.textContent = '點此排入';
-                    patientCell.classList.remove('filled');
-                    patientCell.style.color = '';
-                    clearBtn.style.visibility = 'hidden';
-                }
-            });
+            body.innerHTML = bodyHtml;
         }
 
         async function loadAllData() {
-            setStatus('讀取中...', 'loading');
+            hasUnsavedChanges = false;
+            saveBtn.disabled = true;
+            statusText.textContent = '讀取中...';
             try {
-                const [patients, baseScheduleRes] = await Promise.all([
+                const [patients, ...dailyBaseRecords] = await Promise.all([
                     patientsApi.fetchAll(),
-                    fetch(`${BASE_SCHEDULE_API_URL}`).then(res => res.ok ? res.json() : Promise.resolve([]))
+                    ...Object.values(BASE_SCHEDULE_APIS).map(url => fetch(url).then(res => res.ok ? res.json() : []))
                 ]);
-
                 allOpdPatients = patients.filter(p => p.status === 'opd' && !p.isDeleted);
-                if (baseScheduleRes && baseScheduleRes.length > 0) {
-                    // Assuming the first record is the one we use
-                    baseSchedule = baseScheduleRes[0].scheduleData || {};
-                }
                 
-                populateSchedule();
-                setStatus('資料已載入', 'saved');
-            } catch (error) {
-                console.error("載入資料失敗:", error);
-                setStatus('載入失敗', 'error');
-                alert(`載入資料失敗: ${error.message}`);
+                baseSchedule.clear();
+                dailyBaseRecords.forEach((records, dayIndex) => {
+                    records.forEach(record => {
+                        const fullSlotId = `${record.slotId}-${dayIndex}`;
+                        baseSchedule.set(fullSlotId, record.patientId);
+                    });
+                });
+                
+                populateScheduleData();
+                statusText.textContent = '常規模板已載入';
+            } catch (error) { 
+                console.error("載入資料失敗:", error); 
+                statusText.textContent = '讀取失敗';
+                alert(`載入資料失敗: ${error.message}`); 
             }
+        }
+        
+        function populateScheduleData() {
+            const patientMap = new Map(allOpdPatients.map(p => [p.id, p]));
+            document.querySelectorAll('.schedule-slot').forEach(slot => {
+                const slotId = slot.dataset.slotId;
+                const patientId = baseSchedule.get(slotId);
+                slot.innerHTML = '';
+                slot.className = 'schedule-slot';
+                if (patientId) {
+                    const patient = patientMap.get(patientId);
+                    if (patient) {
+                        slot.classList.add('filled');
+                        slot.innerHTML = `<div class="slot-patient-name">${patient.name}</div>`;
+                    } else {
+                        slot.innerHTML = `<div class="slot-patient-name" style="color:red;">ID不存在</div>`;
+                    }
+                }
+            });
         }
 
         async function saveChanges() {
             saveBtn.disabled = true;
-            setStatus('儲存中...', 'loading');
+            statusText.textContent = '儲存中...';
             try {
-                const response = await fetch(`${BASE_SCHEDULE_API_URL}/${BASE_SCHEDULE_RECORD_ID}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ scheduleData: baseSchedule })
+                const clearPromises = Object.values(BASE_SCHEDULE_APIS).map(async url => {
+                    const records = await fetch(url).then(res => res.json());
+                    return Promise.all(records.map(r => fetch(`${url}/${r.id}`, { method: 'DELETE' })));
                 });
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        const createResponse = await fetch(BASE_SCHEDULE_API_URL, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: BASE_SCHEDULE_RECORD_ID, scheduleData: baseSchedule })
-                        });
-                         if (!createResponse.ok) throw new Error('建立新記錄失敗');
-                    } else {
-                        throw new Error(`儲存失敗，狀態碼: ${response.status}`);
+                await Promise.all(clearPromises);
+
+                const newScheduleByDay = {};
+                baseSchedule.forEach((patientId, fullSlotId) => {
+                    const [bed, shiftIndex, dayIndex] = fullSlotId.split('-');
+                    const slotId = `${bed}-${shiftIndex}`;
+                    if (!newScheduleByDay[dayIndex]) {
+                        newScheduleByDay[dayIndex] = [];
                     }
-                }
+                    newScheduleByDay[dayIndex].push({ slotId, patientId });
+                });
+
+                const savePromises = Object.entries(newScheduleByDay).map(([dayIndex, records]) => {
+                    const url = BASE_SCHEDULE_APIS[dayIndex];
+                    return Promise.all(records.map(record => fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(record)
+                    })));
+                });
+                
+                await Promise.all(savePromises);
+
                 hasUnsavedChanges = false;
-                setStatus('儲存成功！', 'saved');
+                statusText.textContent = '範本儲存成功！';
+                saveBtn.disabled = true;
+                alert('常規門診範本已成功儲存！');
             } catch (error) {
                 console.error("儲存失敗:", error);
-                setStatus('儲存失敗', 'error');
+                statusText.textContent = '儲存失敗';
                 alert(`儲存失敗: ${error.message}`);
                 saveBtn.disabled = false;
             }
         }
         
         function openPatientDialog(slotId) {
+            const dialog = document.getElementById('patient-select-dialog');
             dialogState.targetSlotId = slotId;
             dialogState.selectedPatientId = null;
-            dialogConfirmBtn.disabled = true;
-            patientSearchInput.value = '';
-            freqFilter.value = '';
-            diseaseFilter.value = '';
+            dialog.querySelector('#dialog-confirm-btn').disabled = true;
+            dialog.querySelector('#patient-search').value = '';
+            dialog.querySelector('#freq-filter').value = '';
+            dialog.querySelector('#disease-filter').value = '';
             
-            const [bed, shift] = slotId.split('-');
-            dialogTitle.textContent = `為 床號 ${bed} - ${SHIFTS[shift]} 選擇病人`;
+            const [bed, shift, day] = slotId.split('-');
+            dialog.querySelector('#dialog-title').textContent = `為 床號 ${bed} - ${SHIFTS[shift]} (${WEEKDAYS[day]}) 選擇病人`;
 
             renderPatientListInDialog();
             dialog.showModal();
         }
 
         function renderPatientListInDialog() {
-            const searchTerm = patientSearchInput.value.toLowerCase();
-            const selectedFreq = freqFilter.value;
-            const selectedDisease = diseaseFilter.value;
+            const patientListContainer = document.getElementById('patient-list-container');
+            const searchTerm = document.getElementById('patient-search').value.toLowerCase();
+            const selectedFreq = document.getElementById('freq-filter').value;
+            const selectedDisease = document.getElementById('disease-filter').value;
 
             const patientsToShow = allOpdPatients.filter(p => {
                 const matchesSearch = !searchTerm || (p.name && p.name.toLowerCase().includes(searchTerm)) || (p.medicalRecordNumber && p.medicalRecordNumber.includes(searchTerm));
@@ -301,50 +315,46 @@
         }
         
         function handleGridClick(e) {
-            const target = e.target;
-            const slot = target.closest('.shift-slot');
+            const slot = e.target.closest('.schedule-slot');
             if (!slot) return;
             
             const slotId = slot.dataset.slotId;
-            const action = target.dataset.action;
-
-            if (action === 'select-patient') {
-                if (target.classList.contains('filled')) {
-                    const patientId = baseSchedule[slotId];
-                    const choice = prompt(`此床位已安排病人。\n請輸入 1 清除此班次，或輸入 2 清除此病人在本表的所有排班。\n(按取消以離開)`);
-                    if (choice === '1') {
-                        delete baseSchedule[slotId];
-                        setChange();
-                        populateSchedule();
-                    } else if (choice === '2') {
-                        Object.keys(baseSchedule).forEach(key => {
-                            if (baseSchedule[key] === patientId) {
-                                delete baseSchedule[key];
-                            }
-                        });
-                        setChange();
-                        populateSchedule();
-                    }
-                } else {
-                    openPatientDialog(slotId);
+            if (slot.classList.contains('filled')) {
+                const patientId = baseSchedule.get(slotId);
+                const choice = prompt(`此床位已安排病人。\n請輸入 1 清除此班次，或輸入 2 清除此病人在本表的所有排班。\n(按取消以離開)`);
+                if (choice === '1') {
+                    baseSchedule.delete(slotId);
+                    setChange();
+                    populateScheduleData();
+                } else if (choice === '2') {
+                    baseSchedule.forEach((pid, sid) => {
+                        if (pid === patientId) {
+                            baseSchedule.delete(sid);
+                        }
+                    });
+                    setChange();
+                    populateScheduleData();
                 }
-            } else if (action === 'clear-patient') {
-                delete baseSchedule[slotId];
-                setChange();
-                populateSchedule();
+            } else {
+                openPatientDialog(slotId);
             }
         }
         
-        function setupFilters() {
-            freqFilter.innerHTML = '<option value="">全部頻率</option>' + FREQUENCIES.map(f => `<option value="${f}">${f}</option>`).join('');
-            diseaseFilter.innerHTML = '<option value="">全部疾病</option>' + DISEASES.map(d => `<option value="${d}">${d}</option>`).join('');
-        }
-
         function setupEventListeners() {
-            grid.addEventListener('click', handleGridClick);
+            document.getElementById('weekly-schedule-body').addEventListener('click', handleGridClick);
+
+            const dialog = document.getElementById('patient-select-dialog');
+            const confirmBtn = document.getElementById('dialog-confirm-btn');
+            const cancelBtn = document.getElementById('dialog-cancel-btn');
+            const patientSearchInput = document.getElementById('patient-search');
+            const freqFilter = document.getElementById('freq-filter');
+            const diseaseFilter = document.getElementById('disease-filter');
+            const patientListContainer = document.getElementById('patient-list-container');
+
             patientSearchInput.addEventListener('input', () => renderPatientListInDialog());
             freqFilter.addEventListener('change', () => renderPatientListInDialog());
             diseaseFilter.addEventListener('change', () => renderPatientListInDialog());
+            
             patientListContainer.addEventListener('click', e => {
                 const item = e.target.closest('.patient-list-item');
                 if (item) {
@@ -352,10 +362,11 @@
                     if (previouslySelected) previouslySelected.classList.remove('selected');
                     item.classList.add('selected');
                     dialogState.selectedPatientId = item.dataset.patientId;
-                    dialogConfirmBtn.disabled = false;
+                    confirmBtn.disabled = false;
                 }
             });
-            dialogConfirmBtn.addEventListener('click', () => {
+
+            confirmBtn.addEventListener('click', () => {
                 if (dialogState.selectedPatientId && dialogState.targetSlotId) {
                     const patient = allOpdPatients.find(p => p.id === dialogState.selectedPatientId);
                     const fillType = document.querySelector('input[name="fill-type"]:checked').value;
@@ -366,26 +377,30 @@
                         const dayIndexes = FREQ_MAP_TO_DAY_INDEX[freq];
                         dayIndexes.forEach(dayIndex => {
                             const newSlotId = `${bed}-${shiftIndex}-${dayIndex}`;
-                            baseSchedule[newSlotId] = dialogState.selectedPatientId;
+                            baseSchedule.set(newSlotId, dialogState.selectedPatientId);
                         });
                     } else {
-                        baseSchedule[dialogState.targetSlotId] = dialogState.selectedPatientId;
+                        baseSchedule.set(dialogState.targetSlotId, dialogState.selectedPatientId);
                     }
                     
                     setChange();
-                    populateSchedule();
+                    populateScheduleData();
                     dialog.close();
                 }
             });
-            dialogCancelBtn.addEventListener('click', () => dialog.close());
+
+            cancelBtn.addEventListener('click', () => dialog.close());
             saveBtn.addEventListener('click', saveChanges);
         }
 
-        // --- Initializer ---
-        generateLayout();
-        setupFilters();
-        loadAllData();
-        setupEventListeners();
+        function setupFilters() {
+            const freqFilter = document.getElementById('freq-filter');
+            const diseaseFilter = document.getElementById('disease-filter');
+            freqFilter.innerHTML = '<option value="">全部頻率</option>' + FREQUENCIES.map(f => `<option value="${f}">${f}</option>`).join('');
+            diseaseFilter.innerHTML = '<option value="">全部疾病</option>' + DISEASES.map(d => `<option value="${d}">${d}</option>`).join('');
+        }
+
+        initialize();
     });
     </script>
 </body>
