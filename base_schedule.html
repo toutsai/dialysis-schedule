@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>常規門診週範本設定 (V2.2 - 最終潔淨版)</title>
+    <title>常規門診床位表 (V2.2 - 最終潔淨版)</title>
     <style>
         :root {
             --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
@@ -58,10 +58,10 @@
 <body>
     <div class="container">
         <div class="header-toolbar">
-            <h1>常規門診週範本設定</h1>
+            <h1>常規門診床位表</h1>
             <div class="main-actions">
                 <span id="status-text"></span>
-                <button id="save-changes-btn" disabled>儲存範本</button>
+                <button id="save-changes-btn" disabled>儲存床位</button>
             </div>
         </div>
         <div class="table-wrapper">
@@ -170,11 +170,11 @@
                 });
                 
                 populateScheduleData();
-                statusText.textContent = '常規模板已載入';
+                statusText.textContent = '常規床位已載入';
             } catch (error) { 
                 console.error("載入資料失敗:", error); 
                 statusText.textContent = '讀取失敗';
-                alert(`載入資料失敗: ${error.message}`); 
+                alert(`載入床位失敗: ${error.message}`); 
             }
         }
         
@@ -229,9 +229,9 @@
                 await Promise.all(savePromises);
 
                 hasUnsavedChanges = false;
-                statusText.textContent = '範本儲存成功！';
+                statusText.textContent = '床位儲存成功！';
                 saveBtn.disabled = true;
-                alert('常規門診範本已成功儲存！');
+                alert('常規門診床位已成功儲存！');
             } catch (error) {
                 console.error("儲存失敗:", error);
                 statusText.textContent = '儲存失敗';
