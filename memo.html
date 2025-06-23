@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>交班備忘錄</title>
+    <title>交班備忘錄 (Firebase 版)</title>
     <style>
+        /* 樣式保持不變 */
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background-color: #f9f9f9; margin: 0; padding: 20px; }
         .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         h1 { text-align: center; color: #333; }
@@ -54,9 +55,18 @@
         </div>
     </div>
 
+    <!-- 1. 加入橋接程式碼 -->
+    <script>
+        window.db = window.parent.db;
+        window.firebase = window.parent.firebase;
+    </script>
+    <!-- 2. 引入標準的 API Manager -->
+    <script src="api_manager.js"></script>
+
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const API_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/memos';
+        // 3. 使用標準的 ApiManager 來建立 memosApi 實例
+        const memosApi = ApiManager('memos');
 
         const contentInput = document.getElementById('memo-content-input');
         const patientInput = document.getElementById('memo-patient-input');
@@ -67,9 +77,8 @@
 
         async function fetchMemos() {
             try {
-                const response = await fetch(API_URL);
-                if (!response.ok) throw new Error('無法獲取備忘錄');
-                const memos = await response.json();
+                // 4. 使用 memosApi.fetchAll() 取代 fetch(API_URL)
+                const memos = await memosApi.fetchAll();
                 renderMemos(memos);
             } catch (error) {
                 console.error(error);
@@ -84,6 +93,7 @@
             const sevenDaysAgo = new Date();
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
+            // Firestore 回傳的 createdAt 可能是字串，需要轉換
             memos.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
             memos.forEach(memo => {
@@ -92,8 +102,10 @@
                 if (memo.isResolved) {
                     li.classList.add('resolved');
                 }
-
-                let metaHtml = `<span class="date">建立於: ${new Date(memo.createdAt).toLocaleString()}</span>`;
+                
+                // Firestore 回傳的 createdAt 可能是字串，需要轉換
+                const createdAtDate = memo.createdAt ? new Date(memo.createdAt) : new Date();
+                let metaHtml = `<span class="date">建立於: ${createdAtDate.toLocaleString()}</span>`;
                 if (memo.patientName) metaHtml += ` | <span class="patient">關聯病人: <strong>${memo.patientName}</strong></span>`;
                 if (memo.targetDate) metaHtml += ` | <span class="target-date">目標日期: <strong>${memo.targetDate}</strong></span>`;
 
@@ -109,8 +121,7 @@
                 `;
 
                 if (memo.isResolved) {
-                    // Only show resolved memos from the last 7 days
-                    if (new Date(memo.createdAt) > sevenDaysAgo) {
+                    if (createdAtDate > sevenDaysAgo) {
                          resolvedList.appendChild(li);
                     }
                 } else {
@@ -135,12 +146,8 @@
             };
 
             try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(newMemo)
-                });
-                if (!response.ok) throw new Error('新增失敗');
+                // 5. 使用 memosApi.save() 取代 fetch(API_URL, { method: 'POST' ... })
+                await memosApi.save(newMemo);
                 
                 contentInput.value = '';
                 patientInput.value = '';
@@ -154,12 +161,8 @@
 
         async function updateMemoStatus(id, isResolved) {
             try {
-                const response = await fetch(`${API_URL}/${id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ isResolved: isResolved })
-                });
-                if (!response.ok) throw new Error('更新狀態失敗');
+                // 6. 使用 memosApi.update() 取代 fetch(URL, { method: 'PUT' ... })
+                await memosApi.update(id, { isResolved: isResolved });
                 fetchMemos();
             } catch (error) {
                 console.error(error);
@@ -170,8 +173,8 @@
         async function deleteMemo(id) {
             if (!confirm('確定要永久刪除這條備忘嗎？此操作無法復原。')) return;
             try {
-                const response = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
-                if (!response.ok) throw new Error('刪除失敗');
+                // 7. 使用 memosApi.remove() 取代 fetch(URL, { method: 'DELETE' })
+                await memosApi.remove(id);
                 fetchMemos();
             } catch (error) {
                 console.error(error);

@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>常規門診床位表 (V2.2 - 最終潔淨版)</title>
+    <title>常規門診床位表 (Firebase 版)</title>
     <style>
+        /* 樣式保持不變 */
         :root {
             --primary-color: #007bff; --success-color: #28a745; --danger-color: #dc3545;
             --border-color: #dee2e6; --sidebar-bg: #f8f9fa; --green-bg: #e8f5e9;
@@ -91,19 +92,17 @@
         </div>
     </dialog>
 
+    <script>
+        window.db = window.parent.db; 
+        window.firebase = window.parent.firebase;
+    </script>
     <script src="api_manager.js"></script>
+
     <script>
     document.addEventListener('DOMContentLoaded', () => {
         const patientsApi = ApiManager('patients');
-        const BASE_SCHEDULE_APIS = {
-            0: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_mon',
-            1: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_tue',
-            2: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_wed',
-            3: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_thu',
-            4: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_fri',
-            5: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_sat',
-        };
-        
+        const baseSchedulesApi = ApiManager('base_schedules');
+
         const SHIFTS = ['早班', '午班', '晚班'];
         const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
         const bedLayout = [ 1,2,3,5,6,7,8,9,11,12,13,15,16,17,18,19,21,22,23,25,26,27,28,29, 31,32,33,35,36,37,38,39,51,52,53,55,56,57,58,59,61,62,63,65 ].sort((a, b) => a - b);
@@ -114,6 +113,7 @@
 
         let allOpdPatients = [];
         let baseSchedule = new Map();
+        let originalBaseSchedule = [];
         let hasUnsavedChanges = false;
         let dialogState = { targetSlotId: null, selectedPatientId: null };
 
@@ -155,18 +155,18 @@
             saveBtn.disabled = true;
             statusText.textContent = '讀取中...';
             try {
-                const [patients, ...dailyBaseRecords] = await Promise.all([
-                    patientsApi.fetchAll(),
-                    ...Object.values(BASE_SCHEDULE_APIS).map(url => fetch(url).then(res => res.ok ? res.json() : []))
+                const { where } = window.firebase.firestore;
+                const [patients, baseScheduleRecords] = await Promise.all([
+                    patientsApi.fetchAll([where("status", "==", "opd"), where("isDeleted", "==", false)]),
+                    baseSchedulesApi.fetchAll()
                 ]);
-                allOpdPatients = patients.filter(p => p.status === 'opd' && !p.isDeleted);
+                allOpdPatients = patients;
+                originalBaseSchedule = baseScheduleRecords;
                 
                 baseSchedule.clear();
-                dailyBaseRecords.forEach((records, dayIndex) => {
-                    records.forEach(record => {
-                        const fullSlotId = `${record.slotId}-${dayIndex}`;
-                        baseSchedule.set(fullSlotId, record.patientId);
-                    });
+                originalBaseSchedule.forEach(record => {
+                    const slotId = `${record.bedNumber}-${record.shiftIndex}-${record.dayIndex}`;
+                    baseSchedule.set(slotId, record.patientId);
                 });
                 
                 populateScheduleData();
@@ -192,6 +192,7 @@
                         slot.innerHTML = `<div class="slot-patient-name">${patient.name}</div>`;
                     } else {
                         slot.innerHTML = `<div class="slot-patient-name" style="color:red;">ID不存在</div>`;
+                        baseSchedule.delete(slotId);
                     }
                 }
             });
@@ -201,37 +202,30 @@
             saveBtn.disabled = true;
             statusText.textContent = '儲存中...';
             try {
-                const clearPromises = Object.values(BASE_SCHEDULE_APIS).map(async url => {
-                    try {
-                        const records = await fetch(url).then(res => res.json());
-                        return Promise.all(records.map(r => fetch(`${url}/${r.id}`, { method: 'DELETE' })));
-                    } catch (e) { return Promise.resolve(); }
-                });
-                await Promise.all(clearPromises);
+                const deletePromises = originalBaseSchedule.map(record => baseSchedulesApi.remove(record.id));
+                await Promise.all(deletePromises);
 
-                const newScheduleByDay = {};
+                const newRecords = [];
                 baseSchedule.forEach((patientId, fullSlotId) => {
-                    const [bed, shiftIndex, dayIndex] = fullSlotId.split('-');
-                    const slotId = `${bed}-${shiftIndex}`;
-                    if (!newScheduleByDay[dayIndex]) newScheduleByDay[dayIndex] = [];
-                    newScheduleByDay[dayIndex].push({ slotId, patientId });
-                });
-
-                const savePromises = Object.entries(newScheduleByDay).map(([dayIndex, records]) => {
-                    const url = BASE_SCHEDULE_APIS[dayIndex];
-                    return Promise.all(records.map(record => fetch(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(record)
-                    })));
+                    const [bedNumber, shiftIndex, dayIndex] = fullSlotId.split('-');
+                    newRecords.push({
+                        patientId,
+                        bedNumber: parseInt(bedNumber, 10),
+                        shiftIndex: parseInt(shiftIndex, 10),
+                        dayIndex: parseInt(dayIndex, 10)
+                    });
                 });
                 
+                const savePromises = newRecords.map(record => baseSchedulesApi.save(record));
                 await Promise.all(savePromises);
 
                 hasUnsavedChanges = false;
                 statusText.textContent = '床位儲存成功！';
                 saveBtn.disabled = true;
                 alert('常規門診床位已成功儲存！');
+                
+                await loadAllData();
+
             } catch (error) {
                 console.error("儲存失敗:", error);
                 statusText.textContent = '儲存失敗';
@@ -369,10 +363,65 @@
             renderWeeklyScheduleTableFrame();
             setupFilters();
             setupEventListeners();
+            
+            // 將 where 函式從 Firestore SDK 中解構出來，以便在後續的 fetchAll 呼叫中使用
+            // 這需要確保 window.db 已經被橋接程式碼正確設定
+            if (window.db && window.firebase.firestore) {
+                const { where } = window.firebase.firestore;
+                // 為了安全起見，將它也掛載到 window，確保在其他地方能取用到
+                // 雖然在這個檔案中，直接使用區域變數 where 即可
+                window.where = where; 
+            } else {
+                console.error("Firebase or Firestore is not available on the window object!");
+                statusText.textContent = 'Firebase 初始化失敗！';
+                return;
+            }
+
             await loadAllData();
         }
 
-        initialize();
+        // 為了讓 where 函式能在 loadAllData 中被存取，我們需要調整 initialize 的結構
+        // 或者將 where 的解構提前。一個更安全的做法是在使用它的函式內部進行解構。
+        // 但為了簡化，我們在 initialize 中處理。
+        // 修正後的 initialize 結構：
+
+        async function initializeApp() {
+            // 確保 DOM 已載入
+            renderWeeklyScheduleTableFrame();
+            setupFilters();
+            setupEventListeners();
+            
+            // 確保 Firebase 已初始化
+            if (!window.db || !window.firebase.firestore) {
+                console.error("Firebase or Firestore is not available on the window object!");
+                statusText.textContent = 'Firebase 初始化失敗！';
+                // 可以設定一個計時器稍後重試
+                setTimeout(initializeApp, 500);
+                return;
+            }
+
+            // 在這裡進行解構，確保 firebase.firestore 存在
+            const { where } = window.firebase.firestore;
+            window.where = where; 
+
+            await loadAllData();
+        }
+
+        // 由於我們把 where 的解構移到了 initializeApp 中，
+        // loadAllData 也需要能存取到它。
+        // 為了避免作用域問題，我們把 where 的解構放在 loadAllData 內部，這是最穩妥的做法。
+        // 所以 initialize 函式不需要那麼複雜。
+
+        async function finalInitialize() {
+            renderWeeklyScheduleTableFrame();
+            setupFilters();
+            setupEventListeners();
+            await loadAllData();
+        }
+
+        // 呼叫最終的初始化函式
+        finalInitialize();
+
     });
     </script>
 </body>

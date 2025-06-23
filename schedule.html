@@ -125,6 +125,13 @@
         </div>
     </div>
     
+<script>
+    // 從父視窗 (index.html) 的 window 物件中獲取 db 實例
+    // 並將它設定到本頁面 (iframe) 的 window 物件上
+    window.db = window.parent.db;
+    window.firebase = window.parent.firebase;
+</script>
+
     <script src="api_manager.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
