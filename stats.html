@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
-    <title>護理師組別統計報表 (V25.1 - 完整修正版)</title>
+    <title>護理師組別統計報表 (Firebase 版)</title>
     <style>
         body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; padding: 20px; background-color: #f9f9f9; }
         .top-bar { display: flex; justify-content: space-between; align-items: center; max-width: 100%; margin: 0 auto 20px; }
@@ -73,268 +73,288 @@
         </div>
     </div>
 
-<script>
-    // 從父視窗 (index.html) 的 window 物件中獲取 db 實例
-    // 並將它設定到本頁面 (iframe) 的 window 物件上
-    window.db = window.parent.db;
-    window.firebase = window.parent.firebase;
-</script>
-
     <script src="api_manager.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const schedulesApi = ApiManager('schedules');
-        const patientsApi = ApiManager('patients');
-        const MEMOS_API_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/memos';
-        
-        let currentDate = new Date();
-        let currentRecord = null;
-        let allPatients = [];
-        let allMemos = [];
-        let hasUnsavedChanges = false;
 
-        const statusIndicator = document.getElementById('status-indicator');
-        const dateDisplay = document.getElementById('current-date-display');
-        const earlyTable = document.getElementById('early-shift-table');
-        const lateTable = document.getElementById('late-shift-table');
-        const saveBtn = document.getElementById('save-changes-btn');
-
-        const nurseNameList = [ "陳素秋", "古孟麗", "謝常菁", "林玉麗", "陳聖柔", "田姿瑛", "陳韋吟", "劉姿秀", "劉舒婷", "李慈賢", "黃羿寧", "高佩鳳", "林沛儀", "李汶娟", "陳芃諭", "葛孟萍", "蘇愛玲", "郭芳君", "林馨如", "賴秋妏", "胡國暄", "施艾利", "陳淑玲", "謝慶諭", "林佩佳", "吳思婷", "曾佩君", "吳幸美" ];
-        const nurseOptionsHTML = `<option value=""></option>` + nurseNameList.map(name => `<option value="${name}">${name}</option>`).join('');
-        const baseTeams = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', '外圍'];
-        
-        const formatDate = (date) => {
-            const year = date.getFullYear();
-            const month = (date.getMonth() + 1).toString().padStart(2, '0');
-            const day = date.getDate().toString().padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
-        const setStatus = (message, type) => {
-            statusIndicator.textContent = message;
-            statusIndicator.className = `status-indicator ${type}`;
-        };
-
-        function setChange() {
-            hasUnsavedChanges = true;
-            saveBtn.disabled = false;
-            setStatus('有未儲存的變更', 'unsaved');
-        }
-
-        async function loadData(dateStr) {
-            hasUnsavedChanges = false;
-            saveBtn.disabled = true;
-            earlyTable.innerHTML = '<tr><td>讀取中...</td></tr>';
-            lateTable.innerHTML = '<tr><td>讀取中...</td></tr>';
-            currentRecord = null;
-            setStatus('讀取中...', 'loading');
+        function initializeStatsPage() {
+            const schedulesApi = ApiManager('schedules');
+            const patientsApi = ApiManager('patients');
+            const memosApi = ApiManager('memos');
             
-            try {
-                const [dailyRecords, patientsData, memosData] = await Promise.all([
-                    schedulesApi.fetchAll(`?date=${dateStr}`),
-                    patientsApi.fetchAll(),
-                    fetch(`${MEMOS_API_URL}?isResolved=false`).then(res => res.ok ? res.json() : [])
-                ]);
+            let currentDate = new Date();
+            let currentRecord = null;
+            let allPatients = [];
+            let allMemos = [];
+            let hasUnsavedChanges = false;
 
-                allPatients = patientsData;
-                allMemos = memosData;
+            const statusIndicator = document.getElementById('status-indicator');
+            const dateDisplay = document.getElementById('current-date-display');
+            const earlyTable = document.getElementById('early-shift-table');
+            const lateTable = document.getElementById('late-shift-table');
+            const saveBtn = document.getElementById('save-changes-btn');
 
-                if (dailyRecords.length > 0) {
-                    currentRecord = dailyRecords[0];
-                    renderReport(currentRecord);
-                    setStatus('資料已載入');
-                } else {
-                    dateDisplay.textContent = `${dateStr} 無排程資料`;
-                    earlyTable.innerHTML = '';
-                    lateTable.innerHTML = '';
-                    setStatus('本日無資料');
-                }
-            } catch (error) {
-                console.error('讀取報表資料失敗:', error);
-                setStatus('讀取失敗', 'error');
+            const nurseNameList = [ "陳素秋", "古孟麗", "謝常菁", "林玉麗", "陳聖柔", "田姿瑛", "陳韋吟", "劉姿秀", "劉舒婷", "李慈賢", "黃羿寧", "高佩鳳", "林沛儀", "李汶娟", "陳芃諭", "葛孟萍", "蘇愛玲", "郭芳君", "林馨如", "賴秋妏", "胡國暄", "施艾利", "陳淑玲", "謝慶諭", "林佩佳", "吳思婷", "曾佩君", "吳幸美" ];
+            const nurseOptionsHTML = `<option value=""></option>` + nurseNameList.map(name => `<option value="${name}">${name}</option>`).join('');
+            const baseTeams = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', '外圍'];
+            
+            const formatDate = (date) => {
+                const year = date.getFullYear();
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                const day = date.getDate().toString().padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+            const setStatus = (message, type) => {
+                statusIndicator.textContent = message;
+                statusIndicator.className = `status-indicator ${type || ''}`;
+            };
+
+            function setChange() {
+                hasUnsavedChanges = true;
+                saveBtn.disabled = false;
+                setStatus('有未儲存的變更', 'unsaved');
             }
-        }
 
-        function renderReport(fullData) {
-            const { schedule, names } = fullData;
-            if (!schedule) {
-                console.warn("記錄中缺少 schedule 物件");
-                earlyTable.innerHTML = '<tr><td>排程資料格式錯誤</td></tr>';
-                lateTable.innerHTML = '<tr><td>排程資料格式錯誤</td></tr>';
-                return;
-            }
-            const statsData = {};
-            const allNurseTeams = [...baseTeams.map(t => `早${t}`), ...baseTeams.map(t => `晚${t}`)];
-            allNurseTeams.forEach(team => { statsData[team] = { patientIds: new Set(), shiftIdMap: {} }; });
-
-            Object.entries(schedule).forEach(([shiftId, shiftDetails]) => {
-                const { patientId, nurse, nurse_in, nurse_out } = shiftDetails;
-                if (!patientId) return;
-
-                const teams = new Set([nurse, nurse_in, nurse_out].filter(Boolean));
-                teams.forEach(team => {
-                    if (statsData[team]) {
-                        statsData[team].patientIds.add(patientId);
-                        statsData[team].shiftIdMap[patientId] = shiftId;
-                    }
-                });
-            });
-
-            generateTable(earlyTable, '早', statsData, names || {});
-            generateTable(lateTable, '晚', statsData, names || {});
-            setupDragAndDrop();
-        }
-
-        function generateTable(tableElement, shiftPrefix, statsData, statsNames) {
-            tableElement.innerHTML = '';
-            const headerRow = document.createElement('tr');
-            headerRow.className = 'team-header-row';
-            headerRow.innerHTML = `<th class="row-header"></th>`;
-            const nameRow = document.createElement('tr');
-            nameRow.innerHTML = `<th class="row-header">姓名</th>`;
-            const patientsRow = document.createElement('tr');
-            patientsRow.innerHTML = `<th class="row-header">病人列表</th>`;
-            
-            baseTeams.forEach(team => {
-                const fullTeamName = `${shiftPrefix}${team}`;
-                headerRow.innerHTML += `<td>${fullTeamName}組</td>`;
-                nameRow.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${fullTeamName}">${nurseOptionsHTML}</select></td>`;
-                
-                const teamData = statsData[fullTeamName] || { patientIds: new Set(), shiftIdMap: {} };
-                const patientHtml = Array.from(teamData.patientIds).map(patientId => {
-                    const patient = allPatients.find(p => p.id === patientId);
-                    if (!patient) return '';
-                    const shiftId = teamData.shiftIdMap[patientId];
-                    const shiftDetails = currentRecord.schedule[shiftId];
-                    const tag = shiftDetails?.tag ? ` (${shiftDetails.tag})` : '';
-                    
-                    const hasMemo = allMemos.some(m => m.patientName === patient.name);
-                    let classes = 'patient-item';
-                    if (patient.status === 'ipd' || tag.includes('住')) classes += ' hospitalized';
-                    if (tag.includes('抽')) classes += ' tag-chou';
-                    if (hasMemo) classes += ' has-memo';
-
-                    return `<span class="${classes}" draggable="true" data-patient-id="${patientId}" data-shift-id="${shiftId}" title="${patient.name}${tag}">
-                        ${patient.name}${tag}
-                    </span>`;
-                }).join('');
-
-                patientsRow.innerHTML += `<td class="patient-list-cell" data-team-id="${fullTeamName}" data-shift-prefix="${shiftPrefix}">${patientHtml}</td>`;
-            });
-            
-            tableElement.append(headerRow, nameRow, patientsRow);
-            tableElement.querySelectorAll('.name-select').forEach(s => {
-                if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId];
-                s.addEventListener('change', setChange);
-            });
-        }
-        
-        function setupDragAndDrop() {
-            const patientItems = document.querySelectorAll('.patient-item');
-            const patientCells = document.querySelectorAll('.patient-list-cell');
-            let draggedItem = null;
-
-            patientItems.forEach(item => {
-                item.addEventListener('dragstart', e => {
-                    draggedItem = e.target;
-                    setTimeout(() => e.target.style.display = 'none', 0);
-                });
-                item.addEventListener('dragend', () => {
-                    if(draggedItem) {
-                       draggedItem.style.display = 'block';
-                       draggedItem = null;
-                    }
-                });
-            });
-
-            patientCells.forEach(cell => {
-                cell.addEventListener('dragover', e => {
-                    e.preventDefault();
-                    cell.classList.add('drag-over');
-                });
-                cell.addEventListener('dragleave', e => {
-                    cell.classList.remove('drag-over');
-                });
-                cell.addEventListener('drop', e => {
-                    e.preventDefault();
-                    cell.classList.remove('drag-over');
-                    if (draggedItem) {
-                        const originalShiftId = draggedItem.dataset.shiftId;
-                        const newTeam = cell.dataset.teamId;
-                        
-                        if (currentRecord.schedule[originalShiftId]) {
-                            // Update nurse assignment based on shift type
-                            if (originalShiftId.includes('-午-')) {
-                                const oldTeam = currentRecord.schedule[originalShiftId].nurse_in;
-                                if (cell.closest('table').id === 'early-shift-table') {
-                                    currentRecord.schedule[originalShiftId].nurse_in = newTeam;
-                                } else { // late-shift-table
-                                     currentRecord.schedule[originalShiftId].nurse_out = newTeam;
-                                }
-                            } else {
-                                currentRecord.schedule[originalShiftId].nurse = newTeam;
-                            }
-                            cell.appendChild(draggedItem);
-                            setChange();
-                        }
-                    }
-                });
-            });
-        }
-
-        async function saveChanges() {
-            const newNames = {};
-            document.querySelectorAll('.name-select').forEach(select => {
-                if (select.value) {
-                    newNames[select.dataset.teamId] = select.value;
-                }
-            });
-            currentRecord.names = newNames;
-
-            setStatus('儲存中...', 'loading');
-            try {
-                await schedulesApi.update(currentRecord.id, currentRecord);
+            async function loadData(dateStr) {
                 hasUnsavedChanges = false;
                 saveBtn.disabled = true;
-                setStatus('變更已儲存', 'saved');
-                alert('變更儲存成功！');
-            } catch (error) {
-                console.error("儲存變更失敗:", error);
-                setStatus('儲存失敗', 'error');
-                alert(`儲存失敗: ${error.message}`);
+                earlyTable.innerHTML = '<tr><td>讀取中...</td></tr>';
+                lateTable.innerHTML = '<tr><td>讀取中...</td></tr>';
+                currentRecord = null;
+                setStatus('讀取中...', 'loading');
+                
+                try {
+                    const { where } = window.firebase.firestore;
+                    const [dailyRecords, patientsData, memosData] = await Promise.all([
+                        schedulesApi.fetchAll([where("date", "==", dateStr)]),
+                        patientsApi.fetchAll(),
+                        memosApi.fetchAll([where("isResolved", "==", false)])
+                    ]);
+
+                    allPatients = patientsData;
+                    allMemos = memosData;
+
+                    if (dailyRecords.length > 0) {
+                        currentRecord = dailyRecords[0];
+                        renderReport(currentRecord);
+                        setStatus('資料已載入');
+                    } else {
+                        dateDisplay.textContent = `${dateStr} 無排程資料`;
+                        earlyTable.innerHTML = '';
+                        lateTable.innerHTML = '';
+                        setStatus('本日無資料');
+                    }
+                } catch (error) {
+                    console.error('讀取報表資料失敗:', error);
+                    setStatus('讀取失敗', 'error');
+                }
+            }
+
+            function renderReport(fullData) {
+                const { schedule, names } = fullData;
+                if (!schedule) {
+                    console.warn("記錄中缺少 schedule 物件");
+                    earlyTable.innerHTML = '<tr><td>排程資料格式錯誤</td></tr>';
+                    lateTable.innerHTML = '<tr><td>排程資料格式錯誤</td></tr>';
+                    return;
+                }
+                const statsData = {};
+                const allNurseTeams = [...baseTeams.map(t => `早${t}`), ...baseTeams.map(t => `晚${t}`)];
+                allNurseTeams.forEach(team => { statsData[team] = { patientIds: new Set(), shiftIdMap: {} }; });
+
+                Object.entries(schedule).forEach(([shiftId, shiftDetails]) => {
+                    const { patientId, nurse, nurse_in, nurse_out } = shiftDetails;
+                    if (!patientId) return;
+
+                    const teams = new Set([nurse, nurse_in, nurse_out].filter(Boolean));
+                    teams.forEach(team => {
+                        if (statsData[team]) {
+                            statsData[team].patientIds.add(patientId);
+                            statsData[team].shiftIdMap[patientId] = shiftId;
+                        }
+                    });
+                });
+
+                generateTable(earlyTable, '早', statsData, names || {});
+                generateTable(lateTable, '晚', statsData, names || {});
+                setupDragAndDrop();
+            }
+
+            function generateTable(tableElement, shiftPrefix, statsData, statsNames) {
+                tableElement.innerHTML = '';
+                const headerRow = document.createElement('tr');
+                headerRow.className = 'team-header-row';
+                headerRow.innerHTML = `<th class="row-header"></th>`;
+                const nameRow = document.createElement('tr');
+                nameRow.innerHTML = `<th class="row-header">姓名</th>`;
+                const patientsRow = document.createElement('tr');
+                patientsRow.innerHTML = `<th class="row-header">病人列表</th>`;
+                
+                baseTeams.forEach(team => {
+                    const fullTeamName = `${shiftPrefix}${team}`;
+                    headerRow.innerHTML += `<td>${fullTeamName}組</td>`;
+                    nameRow.innerHTML += `<td class="team-name-cell"><select class="name-select" data-team-id="${fullTeamName}">${nurseOptionsHTML}</select></td>`;
+                    
+                    const teamData = statsData[fullTeamName] || { patientIds: new Set(), shiftIdMap: {} };
+                    const patientHtml = Array.from(teamData.patientIds).map(patientId => {
+                        const patient = allPatients.find(p => p.id === patientId);
+                        if (!patient) return '';
+                        const shiftId = teamData.shiftIdMap[patientId];
+                        const shiftDetails = currentRecord.schedule[shiftId];
+                        const tag = shiftDetails?.tag ? ` (${shiftDetails.tag})` : '';
+                        
+                        const hasMemo = allMemos.some(m => m.patientName === patient.name);
+                        let classes = 'patient-item';
+                        if (patient.status === 'ipd' || (tag && tag.toLowerCase().includes('住'))) classes += ' hospitalized';
+                        if (tag && tag.toLowerCase().includes('抽')) classes += ' tag-chou';
+                        if (hasMemo) classes += ' has-memo';
+
+                        return `<span class="${classes}" draggable="true" data-patient-id="${patientId}" data-shift-id="${shiftId}" title="${patient.name}${tag}">
+                            ${patient.name}${tag}
+                        </span>`;
+                    }).join('');
+
+                    patientsRow.innerHTML += `<td class="patient-list-cell" data-team-id="${fullTeamName}" data-shift-prefix="${shiftPrefix}">${patientHtml}</td>`;
+                });
+                
+                tableElement.append(headerRow, nameRow, patientsRow);
+                tableElement.querySelectorAll('.name-select').forEach(s => {
+                    if (statsNames[s.dataset.teamId]) s.value = statsNames[s.dataset.teamId];
+                    s.addEventListener('change', setChange);
+                });
+            }
+            
+            function setupDragAndDrop() {
+                const patientItems = document.querySelectorAll('.patient-item');
+                const patientCells = document.querySelectorAll('.patient-list-cell');
+                let draggedItem = null;
+
+                patientItems.forEach(item => {
+                    item.addEventListener('dragstart', e => {
+                        draggedItem = e.target;
+                        setTimeout(() => e.target.style.display = 'none', 0);
+                    });
+                    item.addEventListener('dragend', () => {
+                        if(draggedItem) {
+                           draggedItem.style.display = 'block';
+                           draggedItem = null;
+                        }
+                    });
+                });
+
+                patientCells.forEach(cell => {
+                    cell.addEventListener('dragover', e => {
+                        e.preventDefault();
+                        cell.classList.add('drag-over');
+                    });
+                    cell.addEventListener('dragleave', e => {
+                        cell.classList.remove('drag-over');
+                    });
+                    cell.addEventListener('drop', e => {
+                        e.preventDefault();
+                        cell.classList.remove('drag-over');
+                        if (draggedItem && currentRecord && currentRecord.schedule) {
+                            const originalShiftId = draggedItem.dataset.shiftId;
+                            const newTeam = cell.dataset.teamId;
+                            
+                            if (currentRecord.schedule[originalShiftId]) {
+                                // Update nurse assignment based on shift type
+                                const shiftIdParts = originalShiftId.split('-');
+                                const shift = shiftIdParts.length > 2 ? shiftIdParts[2] : '';
+
+                                if (shift === '午班') {
+                                    if (cell.closest('table').id === 'early-shift-table') {
+                                        currentRecord.schedule[originalShiftId].nurse_in = newTeam;
+                                    } else { // late-shift-table
+                                         currentRecord.schedule[originalShiftId].nurse_out = newTeam;
+                                    }
+                                } else {
+                                    currentRecord.schedule[originalShiftId].nurse = newTeam;
+                                }
+                                cell.appendChild(draggedItem);
+                                setChange();
+                            }
+                        }
+                    });
+                });
+            }
+
+            async function saveChanges() {
+                if (!currentRecord) {
+                    alert("沒有可儲存的資料！");
+                    return;
+                }
+                const newNames = {};
+                document.querySelectorAll('.name-select').forEach(select => {
+                    if (select.value) {
+                        newNames[select.dataset.teamId] = select.value;
+                    }
+                });
+                currentRecord.names = newNames;
+
+                setStatus('儲存中...', 'loading');
+                try {
+                    await schedulesApi.update(currentRecord.id, currentRecord);
+                    hasUnsavedChanges = false;
+                    saveBtn.disabled = true;
+                    setStatus('變更已儲存', 'saved');
+                    alert('變更儲存成功！');
+                } catch (error) {
+                    console.error("儲存變更失敗:", error);
+                    setStatus('儲存失敗', 'error');
+                    alert(`儲存失敗: ${error.message}`);
+                }
+            }
+            
+            function updateAndLoad(newDate) {
+                if (hasUnsavedChanges && !confirm('您有未儲存的變更，確定要切換日期嗎？所有變更將會遺失。')) return;
+                currentDate = newDate;
+                const dateStr = formatDate(currentDate);
+                document.getElementById('current-date-display').textContent = `${dateStr} 統計報表`;
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.set('date', dateStr);
+                window.history.replaceState({}, '', newUrl);
+                loadData(dateStr);
+            }
+
+            function changeDate(days) {
+                const newDate = new Date(currentDate);
+                newDate.setDate(newDate.getDate() + days);
+                updateAndLoad(newDate);
+            }
+            
+            function initializeApp() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const dateFromUrl = urlParams.get('date');
+                if (dateFromUrl) {
+                    // Basic validation for date format YYYY-MM-DD
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(dateFromUrl)) {
+                        currentDate = new Date(dateFromUrl + 'T00:00:00');
+                    }
+                }
+                updateAndLoad(currentDate);
+
+                saveBtn.addEventListener('click', saveChanges);
+                document.getElementById('prev-date-btn').addEventListener('click', () => changeDate(-1));
+                document.getElementById('next-date-btn').addEventListener('click', () => changeDate(1));
+                document.getElementById('today-btn').addEventListener('click', () => updateAndLoad(new Date()));
+            }
+
+            initializeApp();
+        }
+
+        function waitForFirebase(callback) {
+            if (window.parent && window.parent.db && window.parent.firebase) {
+                window.db = window.parent.db;
+                window.firebase = window.parent.firebase;
+                callback();
+            } else {
+                console.log(location.pathname.split('/').pop() + " is waiting for Firebase...");
+                setTimeout(() => waitForFirebase(callback), 100);
             }
         }
-        
-        function updateAndLoad(newDate) {
-            if (hasUnsavedChanges && !confirm('您有未儲存的變更，確定要切換日期嗎？所有變更將會遺失。')) return;
-            currentDate = newDate;
-            const dateStr = formatDate(currentDate);
-            document.getElementById('current-date-display').textContent = `${dateStr} 統計報表`;
-            const newUrl = new URL(window.location);
-            newUrl.searchParams.set('date', dateStr);
-            window.history.pushState({}, '', newUrl);
-            loadData(dateStr);
-        }
 
-        function changeDate(days) {
-            const newDate = new Date(currentDate);
-            newDate.setDate(newDate.getDate() + days);
-            updateAndLoad(newDate);
-        }
-        
-        function initialize() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const dateFromUrl = urlParams.get('date');
-            const initialDate = dateFromUrl ? new Date(dateFromUrl + 'T00:00:00') : new Date();
-            updateAndLoad(initialDate);
-        }
-
-        // Event Listeners
-        saveBtn.addEventListener('click', saveChanges);
-        document.getElementById('prev-date-btn').addEventListener('click', () => changeDate(-1));
-        document.getElementById('next-date-btn').addEventListener('click', () => changeDate(1));
-        document.getElementById('today-btn').addEventListener('click', () => updateAndLoad(new Date()));
-        
-        initialize();
+        waitForFirebase(initializeStatsPage);
     });
     </script>
 </body>

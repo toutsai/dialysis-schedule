@@ -1,25 +1,21 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>血液透析綜合管理平台 (新架構)</title>
+    <title>血液透析綜合管理平台 (Firebase 最終版)</title>
     <style>
-        html,
-        body {
+        html, body {
             margin: 0;
             padding: 0;
             height: 100%;
             font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
-            overflow: hidden;
+            overflow: hidden; 
         }
-
         .dashboard-container {
             display: flex;
             height: 100vh;
         }
-
         .sidebar {
             width: 220px;
             background-color: #2c3e50;
@@ -30,7 +26,6 @@
             flex-direction: column;
             transition: width 0.3s;
         }
-
         .sidebar-header {
             padding: 0 20px 20px 20px;
             font-size: 1.5em;
@@ -39,14 +34,12 @@
             border-bottom: 1px solid #34495e;
             white-space: nowrap;
         }
-
         .sidebar-nav {
             list-style: none;
             padding: 20px 0;
             margin: 0;
             flex-grow: 1;
         }
-
         .sidebar-nav li a {
             display: flex;
             align-items: center;
@@ -58,23 +51,19 @@
             transition: background-color 0.2s, padding-left 0.2s;
             white-space: nowrap;
         }
-
         .sidebar-nav li a:hover {
             background-color: #34495e;
         }
-
         .sidebar-nav li a.active {
             background-color: #1abc9c;
             color: white;
             font-weight: bold;
             padding-left: 25px;
         }
-
         .content-area {
             flex-grow: 1;
             overflow: hidden;
         }
-
         .content-iframe {
             width: 100%;
             height: 100%;
@@ -82,7 +71,6 @@
         }
     </style>
 </head>
-
 <body>
     <div class="dashboard-container">
         <aside class="sidebar">
@@ -103,224 +91,196 @@
         </main>
     </div>
 
-<!-- 請用這段新的、更完整的程式碼替換舊的 <script type="module"> 區塊 -->
-<script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-  
-  // 我們需要所有會用到的 Firestore 工具函式，所以在這裡一次性 import
-  import { 
-    getFirestore,
-    collection,
-    getDocs,
-    addDoc,
-    updateDoc,
-    deleteDoc,
-    doc,
-    query,
-    where
-  } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
-
-  // Your web app's Firebase configuration
-  const firebaseConfig = {
-    apiKey: "AIzaSyAqO8PzTVP8ARrcSBJqMGrU0svGgRuzHCU",
-    authDomain: "dialysis-schedule-cd36c.firebaseapp.com",
-    projectId: "dialysis-schedule-cd36c",
-    storageBucket: "dialysis-schedule-cd36c.firebasestorage.app",
-    messagingSenderId: "788045577134",
-    appId: "1:788045577134:web:442ad7e7e59f4e3fdf263f"
-  };
-
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  
-  // 將 db 實例和所有工具函式都放到全域 window 物件上
-  // 這樣所有子頁面和 script 都能取用到它們
-  window.db = getFirestore(app);
-  window.firebase = {
-    firestore: {
-      collection,
-      getDocs,
-      addDoc,
-      updateDoc,
-      deleteDoc,
-      doc,
-      query,
-      where
-    }
-  };
-</script>
-<!-- 替換到這裡結束 -->
-
+    <!-- Firebase 初始化和全域工具箱準備 -->
+    <script type="module">
+      // Import the functions you need from the SDKs you need
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+      
+      // 我們需要所有會用到的 Firestore 工具函式，所以在這裡一次性 import
+      import { 
+        getFirestore,
+        collection,
+        getDocs,
+        addDoc,
+        updateDoc,
+        deleteDoc,
+        doc,
+        query,
+        where
+      } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-firestore.js";
+    
+      // Your web app's Firebase configuration
+      const firebaseConfig = {
+        apiKey: "AIzaSyAqO8PzTVP8ARrcSBJqMGrU0svGgRuzHCU",
+        authDomain: "dialysis-schedule-cd36c.firebaseapp.com",
+        projectId: "dialysis-schedule-cd36c",
+        storageBucket: "dialysis-schedule-cd36c.firebasestorage.app",
+        messagingSenderId: "788045577134",
+        appId: "1:788045577134:web:442ad7e7e59f4e3fdf263f"
+      };
+    
+      // Initialize Firebase
+      const app = initializeApp(firebaseConfig);
+      
+      // 將 db 實例和所有工具函式都放到全域 window 物件上
+      // 這樣所有子頁面和 script 都能取用到它們
+      window.db = getFirestore(app);
+      window.firebase = {
+        firestore: {
+          collection,
+          getDocs,
+          addDoc,
+          updateDoc,
+          deleteDoc,
+          doc,
+          query,
+          where
+        }
+      };
+    </script>
+    
+    <!-- index.html 自身的業務邏輯，最終修正版 -->
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
-            const iframe = document.querySelector('.content-iframe');
+    document.addEventListener('DOMContentLoaded', () => {
+        const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
+        const iframe = document.querySelector('.content-iframe');
+
+        // Helper functions
+        function getStartOfWeek(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(new Date(d.setDate(diff)).setHours(0, 0, 0, 0));
+        }
+
+        function formatDate(date) {
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            const day = date.getDate().toString().padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        async function systemInitializer() {
+            console.log("系統初始化啟動 (Firebase 版)...");
+            
+            // 關鍵修正：我們需要從 iframe 的 contentWindow 去檢查 ApiManager
+            if (!iframe.contentWindow || typeof iframe.contentWindow.ApiManager === 'undefined') {
+                console.log("ApiManager not ready in iframe, retrying systemInitializer soon...");
+                setTimeout(systemInitializer, 200); // 稍後重試
+                return;
+            }
+
+            // 從 iframe 的 window 中取得 ApiManager
+            const ApiManager = iframe.contentWindow.ApiManager;
 
             const schedulesApi = ApiManager('schedules');
-            const BASE_SCHEDULE_APIS = {
-                0: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_mon', // Monday
-                1: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_tue',
-                2: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_wed',
-                3: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_thu',
-                4: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_fri',
-                5: 'https://6852ef850594059b23cfaa4f.mockapi.io/base_schedule_sat',
-            };
-            const MEMOS_API_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/memos';
+            const baseSchedulesApi = ApiManager('base_schedules');
+            const memosApi = ApiManager('memos');
 
-            function getStartOfWeek(date) {
-                const d = new Date(date);
-                const day = d.getDay();
-                const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-                return new Date(new Date(d.setDate(diff)).setHours(0, 0, 0, 0));
-            }
+            await preGenerateSchedules(schedulesApi, baseSchedulesApi);
+            await showGlobalMemos(memosApi);
+            console.log("系統初始化完成。");
+        }
 
-            function formatDate(date) {
-                const year = date.getFullYear();
-                const month = (date.getMonth() + 1).toString().padStart(2, '0');
-                const day = date.getDate().toString().padStart(2, '0');
-                return `${year}-${month}-${day}`;
-            }
+        async function preGenerateSchedules(schedulesApi, baseSchedulesApi) {
+            console.log("開始檢查並預生成排班...");
+            try {
+                const baseTemplates = await baseSchedulesApi.fetchAll();
+                
+                const baseTemplatesByDay = {};
+                for (let i = 0; i < 6; i++) { baseTemplatesByDay[i] = {}; }
 
-            async function systemInitializer() {
-                console.log("系統初始化啟動...");
-                await preGenerateSchedules();
-                await showGlobalMemos();
-                console.log("系統初始化完成。");
-            }
-
-            async function preGenerateSchedules() {
-                console.log("開始檢查並預生成排班...");
-                try {
-                    // 1. Fetch all base schedule templates for each day of the week
-                    const baseTemplatesByDay = {};
-                    const baseSchedulePromises = Object.entries(BASE_SCHEDULE_APIS).map(async ([dayIndex, url]) => {
-                        const response = await fetch(url);
-                        const records = response.ok ? await response.json() : [];
-                        const scheduleTemplate = {};
-                        records.forEach(record => {
-                            const [bed, shiftIndex] = record.slotId.split('-');
-                            const shiftName = ['早班', '午班', '晚班'][shiftIndex];
-                            const dailyShiftId = `bed-${bed}-${shiftName}`;
-                            scheduleTemplate[dailyShiftId] = { patientId: record.patientId, shiftId: dailyShiftId };
-                        });
-                        baseTemplatesByDay[dayIndex] = scheduleTemplate;
-                    });
-                    await Promise.all(baseSchedulePromises);
-
-                    // 2. Define the date range to check (this week and next week)
-                    const thisWeekStart = getStartOfWeek(new Date());
-                    const nextWeekStart = new Date(thisWeekStart);
-                    nextWeekStart.setDate(nextWeekStart.getDate() + 7);
-                    const weeksToProcess = [thisWeekStart, nextWeekStart];
-
-                    const datesToCheck = [];
-                    weeksToProcess.forEach(weekStart => {
-                        for (let i = 0; i < 6; i++) { // Monday to Saturday
-                            const targetDate = new Date(weekStart);
-                            targetDate.setDate(weekStart.getDate() + i);
-                            datesToCheck.push(formatDate(targetDate));
-                        }
-                    });
-
-                    // 3. Check which daily records already exist
-                    const existingSchedules = await schedulesApi.fetchAll();
-                    const existingDates = new Set(existingSchedules.map(rec => rec.date));
-
-                    const datesToCreate = datesToCheck.filter(date => !existingDates.has(date));
-
-                    if (datesToCreate.length === 0) {
-                        console.log("本週與下週的排班皆已存在，無需生成。");
-                        return;
+                baseTemplates.forEach(record => {
+                    const { bedNumber, shiftIndex, dayIndex, patientId } = record;
+                    const shiftName = ['早班', '午班', '晚班'][shiftIndex];
+                    const dailyShiftId = `bed-${bedNumber}-${shiftName}`;
+                    if (baseTemplatesByDay[dayIndex] !== undefined) {
+                        baseTemplatesByDay[dayIndex][dailyShiftId] = { patientId, shiftId: dailyShiftId };
                     }
+                });
 
-                    console.log(`準備為以下日期生成排班: ${datesToCreate.join(', ')}`);
+                const thisWeekStart = getStartOfWeek(new Date());
+                const nextWeekStart = new Date(thisWeekStart);
+                nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+                
+                const datesToCheck = [];
+                [thisWeekStart, nextWeekStart].forEach(weekStart => {
+                    for (let i = 0; i < 6; i++) {
+                        const targetDate = new Date(weekStart);
+                        targetDate.setDate(weekStart.getDate() + i);
+                        datesToCheck.push(formatDate(targetDate));
+                    }
+                });
 
-                    // 4. Create new daily records for the missing dates
-                    for (const dateStr of datesToCreate) {
-                        const date = new Date(dateStr + "T00:00:00");
-                        const dayIndex = date.getDay() - 1; // 0 for Monday, etc.
+                const existingSchedules = await schedulesApi.fetchAll();
+                const existingDates = new Set(existingSchedules.map(rec => rec.date));
+                const datesToCreate = datesToCheck.filter(date => !existingDates.has(date));
 
-                        if (dayIndex >= 0 && dayIndex < 6) {
-                            const templateForThisDay = baseTemplatesByDay[dayIndex];
-                            if (templateForThisDay && Object.keys(templateForThisDay).length > 0) {
-                                const newRecord = {
-                                    date: dateStr,
-                                    schedule: templateForThisDay,
-                                    names: {}
-                                };
-                                await schedulesApi.save(newRecord);
-                                console.log(`已成功使用週${dayIndex + 1}範本生成 ${dateStr} 的排班記錄。`);
-                            } else {
-                                console.log(`週${dayIndex + 1} 的常規範本為空，不為 ${dateStr} 生成記錄。`);
-                            }
+                if (datesToCreate.length === 0) {
+                    console.log("本週與下週的排班皆已存在，無需生成。");
+                    return;
+                }
+
+                console.log(`準備為以下日期生成排班: ${datesToCreate.join(', ')}`);
+                
+                for (const dateStr of datesToCreate) {
+                    const date = new Date(dateStr + "T00:00:00");
+                    const dayIndex = date.getDay() === 0 ? 6 : date.getDay() - 1;
+                    
+                    if (dayIndex >= 0 && dayIndex < 6) {
+                        const templateForThisDay = baseTemplatesByDay[dayIndex];
+                        if (templateForThisDay && Object.keys(templateForThisDay).length > 0) {
+                            const newRecord = { date: dateStr, schedule: templateForThisDay, names: {} };
+                            await schedulesApi.save(newRecord);
+                            console.log(`已成功使用週${dayIndex+1}範本生成 ${dateStr} 的排班記錄。`);
+                        } else {
+                             console.log(`週${dayIndex+1} 的常規範本為空，不為 ${dateStr} 生成記錄。`);
                         }
                     }
-
-                } catch (error) {
-                    console.error("預生成排班時發生錯誤:", error);
                 }
+            } catch (error) {
+                console.error("預生成排班時發生錯誤:", error);
             }
-
-            async function showGlobalMemos() {
-                console.log("正在檢查全域備忘...");
-                try {
-                    const response = await fetch(`${MEMOS_API_URL}?isResolved=false`);
-                    if (!response.ok) return;
-                    const memos = await response.json();
-
-                    const globalMemos = memos.filter(m => !m.patientName && !m.targetDate);
-
-                    if (globalMemos.length > 0) {
-                        let message = "【全域交班事項提醒】\n\n";
-                        globalMemos.forEach(memo => {
-                            message += `- ${memo.content}\n`;
-                        });
-                        setTimeout(() => alert(message), 500);
-                    }
-                } catch (error) {
-                    console.error("獲取全域備忘時發生錯誤:", error);
+        }
+        
+        async function showGlobalMemos(memosApi) {
+            console.log("正在檢查全域備忘...");
+            try {
+                const { where } = window.firebase.firestore;
+                const memos = await memosApi.fetchAll([where("isResolved", "==", false)]);
+                const globalMemos = memos.filter(m => !m.patientName && !m.targetDate);
+                
+                if (globalMemos.length > 0) {
+                    let message = "【全域交班事項提醒】\n\n";
+                    globalMemos.forEach(memo => { message += `- ${memo.content}\n`; });
+                    setTimeout(() => alert(message), 500);
                 }
+            } catch (error) {
+                console.error("獲取全域備忘時發生錯誤:", error);
             }
+        }
 
-            // Run the initializer when the main page loads
+        // 監聽 iframe 的載入事件，這是觸發初始化的最佳時機
+        iframe.addEventListener('load', () => {
+            console.log(`Iframe with src "${iframe.contentWindow.location.href}" has loaded. Attempting to start system initializer.`);
             systemInitializer();
+        });
 
-            // Navigation logic
-            window.navigateTo = function (pageUrl) {
-                if (iframe.src !== pageUrl) {
-                    iframe.src = pageUrl;
-                }
-                navLinks.forEach(link => {
-                    const linkPath = new URL(link.href, window.location.origin).pathname;
-                    const targetPath = new URL(pageUrl, window.location.origin).pathname;
-                    if (linkPath === targetPath) {
-                        link.classList.add('active');
-                    } else {
-                        link.classList.remove('active');
-                    }
-                });
-            };
-
-            navLinks.forEach(link => {
-                link.addEventListener('click', (e) => {
-                    navLinks.forEach(l => l.classList.remove('active'));
-                    e.currentTarget.classList.add('active');
-                });
-            });
-
-            iframe.addEventListener('load', () => {
-                const currentIframeSrc = iframe.contentWindow.location.href;
-                navLinks.forEach(link => {
-                    if (link.href === currentIframeSrc) {
-                        link.classList.add('active');
-                    } else {
-                        link.classList.remove('active');
-                    }
-                });
+        // 導航邏輯
+        window.navigateTo = function(pageUrl) {
+            if (iframe.contentWindow.location.href.endsWith(pageUrl)) return;
+            iframe.src = pageUrl;
+        };
+        
+        navLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                navLinks.forEach(l => l.classList.remove('active'));
+                e.currentTarget.classList.add('active');
+                window.navigateTo(e.currentTarget.href);
             });
         });
+    });
     </script>
 </body>
-
 </html>

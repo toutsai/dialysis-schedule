@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>週排班總表 (V5.3 - 完整修正版)</title>
+    <title>週排班總表 (Firebase 版)</title>
     <style>
         :root {
             --green-bg: #e8f5e9; --blue-bg: #e3f2fd; --orange-bg: #fff3e0;
@@ -36,7 +36,6 @@
         .inpatient-sidebar { width: 240px; flex-shrink: 0; background-color: var(--sidebar-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); max-height: calc(75vh + 20px); display: flex; flex-direction: column;}
         .inpatient-sidebar h3 { margin-top: 0; text-align: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 10px; }
         .filter-group { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
-        .filter-group button { padding: 4px 8px; font-size: 0.8em; flex-grow: 1; }
         .filter-group button.active { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
         #inpatient-list { list-style-type: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
         #inpatient-list li { background-color: #fff; border: 1px solid #e0e0e0; padding: 8px 12px; margin-bottom: 8px; border-radius: 5px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; transition: background-color 0.3s; cursor: grab; }
@@ -141,375 +140,421 @@
         </div>
     </dialog>
     
-<script>
-    // 從父視窗 (index.html) 的 window 物件中獲取 db 實例
-    // 並將它設定到本頁面 (iframe) 的 window 物件上
-    window.db = window.parent.db;
-    window.firebase = window.parent.firebase;
-</script>
-
     <script src="api_manager.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const patientsApi = ApiManager('patients');
-        const schedulesApi = ApiManager('schedules');
-        const MEMOS_API_URL = 'https://6852ef850594059b23cfaa4f.mockapi.io/memos';
-        
-        const SHIFTS = ['早班', '午班', '晚班'];
-        const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
-        const bedLayout = [ 1,2,3,5,6,7,8,9,11,12,13,15,16,17,18,19,21,22,23,25,26,27,28,29, 31,32,33,35,36,37,38,39,51,52,53,55,56,57,58,59,61,62,63,65 ].sort((a, b) => a - b);
-        const hepatitisBeds = [31, 32, 33, 35, 36];
-        const FREQUENCIES = ['一三五', '二四六', '一四', '二五', '三六', '一五', '二六', '每周一次', '臨時'];
-        const DISEASES = ['HIV', 'RPR', 'HBV', 'HCV', '隔離'];
-        const FREQ_MAP_TO_DAY_INDEX = { '一三五': [0, 2, 4], '二四六': [1, 3, 5], '一四': [0, 3], '二五': [1, 4], '三六': [2, 5], '一五': [0, 4], '二六': [1, 5] };
-        
-        let allPatients = [];
-        let weekScheduleRecords = new Map();
-        let currentWeekStartDate = getStartOfWeek(new Date());
-        let hasUnsavedChanges = false;
-        let inpatientFilter = 'all';
-        let dialogState = { slotId: null, selectedPatientId: null, currentTab: 'opd' };
 
-        const weekDisplay = document.getElementById('week-display');
-        const addScheduleDialog = document.getElementById('add-schedule-dialog');
-        const dialogTitle = document.getElementById('dialog-title');
-        const patientSearchInput = document.getElementById('patient-search');
-        const patientListContainer = document.getElementById('patient-list-container');
-        const dialogTabs = document.querySelector('.dialog-tabs');
-        const dialogConfirmBtn = document.getElementById('dialog-confirm-btn');
-        const dialogCancelBtn = document.getElementById('dialog-cancel-btn');
-        const saveBtn = document.getElementById('save-changes-btn');
-        const statusText = document.getElementById('status-text');
-        
-        function getStartOfWeek(date) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(new Date(d.setDate(diff)).setHours(0,0,0,0)); }
-        const formatDate = (date, withYear = false) => { const d = new Date(date); if (isNaN(d.getTime())) return ''; const year = d.getFullYear(); const month = d.getMonth() + 1; const day = d.getDate(); return withYear ? `${year}/${month}/${day}` : `${month}/${day}`; };
-        const generateDiseaseTags = (diseases) => { if (!diseases || diseases.length === 0) return ''; return diseases.map(d => `<span class="disease-tag">${d}</span>`).join(''); };
-        
-        async function initialize() {
-            renderWeeklyScheduleTableFrame();
-            setupEventListeners();
-            await loadAllData();
-        }
-
-        function updateDisplay() {
-            updateWeekDisplay();
-            populateScheduleData();
-            updateStatsToolbar();
-            renderInpatientList();
-            updateSaveButtonState();
-        }
-
-        function updateWeekDisplay() {
-            const start = new Date(currentWeekStartDate);
-            const end = new Date(start);
-            end.setDate(start.getDate() + 5);
-            weekDisplay.textContent = `${formatDate(start, true)} ~ ${formatDate(end, true)}`;
-            const headerCells = document.querySelectorAll('#weekly-schedule-head th .date');
-            headerCells.forEach((cell, index) => {
-                const d = new Date(start);
-                d.setDate(d.getDate() + index);
-                cell.textContent = `(${formatDate(d)})`;
-            });
-        }
-        
-        async function loadAllData() {
-            hasUnsavedChanges = false;
-            updateSaveButtonState();
-            statusText.textContent = '讀取中...';
-            try {
-                const weekDates = [];
-                for (let i = 0; i < 6; i++) {
-                    const d = new Date(currentWeekStartDate);
-                    d.setDate(d.getDate() + i);
-                    weekDates.push(formatDate(d));
-                }
-                
-                const [patients, memos, ...dailyRecords] = await Promise.all([
-                    patientsApi.fetchAll(),
-                    fetch(`${MEMOS_API_URL}?isResolved=false`).then(res => res.ok ? res.json() : []),
-                    ...weekDates.map(date => schedulesApi.fetchAll(`?date=${date}`))
-                ]);
-                
-                allPatients = patients.filter(p => !p.isDeleted);
-                
-                weekScheduleRecords.clear();
-                dailyRecords.forEach((records, index) => {
-                    if (records.length > 0) {
-                        weekScheduleRecords.set(weekDates[index], records[0]);
-                    }
-                });
-                
-                statusText.textContent = '資料已載入';
-                updateDisplay();
-                showMemoReminders(memos);
-
-            } catch (error) { 
-                console.error("Failed to fetch data:", error); 
-                statusText.textContent = '讀取失敗';
-                alert(`讀取雲端資料失敗: ${error.message}`); 
-                weekScheduleRecords.clear();
-                updateDisplay();
-            }
-        }
-        
-        function populateScheduleData() {
-            const patientMap = new Map(allPatients.map(p => [p.id, p]));
-            document.querySelectorAll('.schedule-slot').forEach(slot => {
-                const slotId = slot.dataset.slotId;
-                const [bed, shiftIndex, dayIndex] = slotId.split('-');
-                const dateStr = formatDate(new Date(new Date(currentWeekStartDate).setDate(currentWeekStartDate.getDate() + parseInt(dayIndex))));
-                
-                const dailyRecord = weekScheduleRecords.get(dateStr);
-                const dailyShiftId = `bed-${bed}-${SHIFTS[shiftIndex]}`;
-                const scheduleData = dailyRecord?.schedule?.[dailyShiftId];
-                
-                slot.innerHTML = '';
-                slot.className = 'schedule-slot';
-
-                if (scheduleData?.patientId) {
-                    const patient = patientMap.get(scheduleData.patientId);
-                    if (patient) {
-                        slot.classList.add('filled', `status-${patient.status || 'opd'}`);
-                        slot.innerHTML = `<div class="slot-patient-name">${patient.name}</div><div class="slot-patient-mode">${patient.mode || ''}</div>`;
-                    }
-                }
-            });
-        }
-        
-        function renderInpatientList() {
-            const inpatientList = document.getElementById('inpatient-list');
-            let inpatients = allPatients.filter(p => p.status === 'ipd');
-            const filterGroup = document.getElementById('filter-group');
-            const inpatientFilter = filterGroup.querySelector('.active').dataset.filter;
-            const regularFreqs = ['一三五', '二四六'];
-            if (inpatientFilter === '135') { inpatients = inpatients.filter(p => p.frequency === '一三五');
-            } else if (inpatientFilter === '246') { inpatients = inpatients.filter(p => p.frequency === '二四六');
-            } else if (inpatientFilter === 'other') { inpatients = inpatients.filter(p => !regularFreqs.includes(p.frequency)); }
+        function initializeWeeklyViewPage() {
+            const patientsApi = ApiManager('patients');
+            const schedulesApi = ApiManager('schedules');
+            const memosApi = ApiManager('memos');
             
-            inpatientList.innerHTML = '';
-            if (inpatients.length === 0) {
-                inpatientList.innerHTML = '<li>無符合條件的住院病人</li>';
-            } else {
-                inpatients.forEach(p => {
-                    const li = document.createElement('li');
-                    li.draggable = true;
-                    li.dataset.patientId = p.id;
-                    li.innerHTML = `
-                        <div class="patient-info-row"><span class="name">${p.name}</span><span class="freq">${p.frequency || '未設定'}</span></div>
-                        <div class="patient-info-row"><span class="mrn">(${p.medicalRecordNumber || '無病歷號'})</span></div>`;
-                    inpatientList.appendChild(li);
+            const SHIFTS = ['早班', '午班', '晚班'];
+            const WEEKDAYS = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+            const bedLayout = [ 1,2,3,5,6,7,8,9,11,12,13,15,16,17,18,19,21,22,23,25,26,27,28,29, 31,32,33,35,36,37,38,39,51,52,53,55,56,57,58,59,61,62,63,65 ].sort((a, b) => a - b);
+            const hepatitisBeds = [31, 32, 33, 35, 36];
+            const FREQUENCIES = ['一三五', '二四六', '一四', '二五', '三六', '一五', '二六', '每周一次', '臨時'];
+            const DISEASES = ['HIV', 'RPR', 'HBV', 'HCV', '隔離'];
+            const FREQ_MAP_TO_DAY_INDEX = { '一三五': [0, 2, 4], '二四六': [1, 3, 5], '一四': [0, 3], '二五': [1, 4], '三六': [2, 5], '一五': [0, 4], '二六': [1, 5] };
+            
+            let allPatients = [];
+            let weekScheduleRecords = new Map();
+            let currentWeekStartDate = getStartOfWeek(new Date());
+            let hasUnsavedChanges = false;
+            let inpatientFilter = 'all';
+            let dialogState = { slotId: null, selectedPatientId: null, currentTab: 'opd' };
+
+            const weekDisplay = document.getElementById('week-display');
+            const patientSelectDialog = document.getElementById('patient-select-dialog');
+            const dialogConfirmBtn = document.getElementById('dialog-confirm-btn');
+            const saveBtn = document.getElementById('save-changes-btn');
+            const statusText = document.getElementById('status-text');
+            
+            function getStartOfWeek(date) { const d = new Date(date); const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(new Date(d.setDate(diff)).setHours(0,0,0,0)); }
+            const formatDate = (date, withYear = false) => { const d = new Date(date); if (isNaN(d.getTime())) return ''; const year = d.getFullYear(); const month = d.getMonth() + 1; const day = d.getDate(); return withYear ? `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}` : `${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')}`; };
+            const formatDateForQuery = (date) => { const d = new Date(date); const year = d.getFullYear(); const month = (d.getMonth() + 1).toString().padStart(2, '0'); const day = d.getDate().toString().padStart(2, '0'); return `${year}-${month}-${day}`; };
+
+            function setChange() {
+                hasUnsavedChanges = true;
+                statusText.textContent = '有未儲存的變更';
+                saveBtn.disabled = false;
+            }
+
+            async function initialize() {
+                renderWeeklyScheduleTableFrame();
+                setupEventListeners();
+                await loadAllData();
+            }
+
+            function updateDisplay() {
+                updateWeekDisplay();
+                populateScheduleData();
+                updateStatsToolbar();
+                renderInpatientList();
+                updateSaveButtonState();
+            }
+
+            function updateWeekDisplay() {
+                const start = new Date(currentWeekStartDate);
+                const end = new Date(start);
+                end.setDate(start.getDate() + 5);
+                weekDisplay.textContent = `${formatDate(start, true)} ~ ${formatDate(end, true)}`;
+                const headerCells = document.querySelectorAll('#weekly-schedule-head th .date');
+                headerCells.forEach((cell, index) => {
+                    const d = new Date(start);
+                    d.setDate(d.getDate() + index);
+                    cell.textContent = `(${formatDate(d)})`;
                 });
             }
-        }
-
-        function renderWeeklyScheduleTableFrame() {
-            const head = document.getElementById('weekly-schedule-head');
-            const body = document.getElementById('weekly-schedule-body');
-            let headerHtml = '<tr><th>床位</th><th>班次</th>';
-            WEEKDAYS.forEach((day, dIdx) => { headerHtml += `<th><div class="weekday">${day}</div><div class="date" data-day-index="${dIdx}"></div></th>`; });
-            headerHtml += '</tr>';
-            head.innerHTML = headerHtml;
-            let bodyHtml = '';
-            bedLayout.forEach(bedNumber => {
-                const isHepatitis = hepatitisBeds.includes(bedNumber);
-                SHIFTS.forEach((shift, shiftIndex) => {
-                    const rowClass = isHepatitis ? 'hepatitis-bed' : '';
-                    bodyHtml += `<tr class="${rowClass}">`;
-                    if (shiftIndex === 0) bodyHtml += `<td rowspan="3">${bedNumber}號床</td>`;
-                    bodyHtml += `<td>${shift}</td>`;
-                    WEEKDAYS.forEach((day, dayIndex) => {
-                        const slotId = `${bedNumber}-${shiftIndex}-${dayIndex}`;
-                        bodyHtml += `<td data-slot-id-wrapper="${slotId}"><div class="schedule-slot" data-slot-id="${slotId}"></div></td>`;
+            
+            async function loadAllData() {
+                hasUnsavedChanges = false;
+                updateSaveButtonState();
+                statusText.textContent = '讀取中...';
+                try {
+                    const { where } = window.firebase.firestore;
+                    const weekDates = [];
+                    for (let i = 0; i < 6; i++) {
+                        const d = new Date(currentWeekStartDate);
+                        d.setDate(d.getDate() + i);
+                        weekDates.push(formatDateForQuery(d));
+                    }
+                    
+                    const [patients, memos, weeklyRecords] = await Promise.all([
+                        patientsApi.fetchAll(),
+                        memosApi.fetchAll([where("isResolved", "==", false)]),
+                        schedulesApi.fetchAll([where('date', 'in', weekDates)])
+                    ]);
+                    
+                    allPatients = patients.filter(p => !p.isDeleted);
+                    
+                    weekScheduleRecords.clear();
+                    weeklyRecords.forEach(record => {
+                        weekScheduleRecords.set(record.date, record);
                     });
-                    bodyHtml += `</tr>`;
-                });
-            });
-            body.innerHTML = bodyHtml;
-        }
-        
-        const updateStatsToolbar = () => {
-            const statsToolbar = document.getElementById('stats-toolbar');
-            const dailyCounts = WEEKDAYS.map(() => ({ '早班': 0, '午班': 0, '晚班': 0 }));
-            weekScheduleRecords.forEach(record => {
-                if(record && record.schedule) {
-                    const date = new Date(record.date + 'T00:00:00');
-                    const dayIndex = date.getDay() - 1;
-                    if(dayIndex >= 0 && dayIndex < 6) {
-                        Object.values(record.schedule).forEach(slotData => {
-                           if(slotData && slotData.shiftId) {
-                               const shift = slotData.shiftId.split('-')[2];
-                               if(shift === '早班') dailyCounts[dayIndex]['早班']++;
-                               else if(shift === '午班') dailyCounts[dayIndex]['午班']++;
-                               else if(shift === '晚班') dailyCounts[dayIndex]['晚班']++;
-                           }
-                        });
-                    }
+                    
+                    statusText.textContent = '資料已載入';
+                    updateDisplay();
+                    showMemoReminders(memos);
+
+                } catch (error) { 
+                    console.error("Failed to fetch data:", error); 
+                    statusText.textContent = '讀取失敗';
+                    alert(`讀取雲端資料失敗: ${error.message}`); 
+                    weekScheduleRecords.clear();
+                    updateDisplay();
                 }
-            });
-            statsToolbar.innerHTML = dailyCounts.map((counts, dayIndex) => 
-                `<div class="stat-item"><strong>${WEEKDAYS[dayIndex].slice(-1)}:</strong><div class="stat-shift-group"><span class="shift-early">早:${counts['早班']}</span><span class="shift-noon">午:${counts['午班']}</span><span class="shift-late">晚:${counts['晚班']}</span></div></div>`
-            ).join('');
-        };
-        
-        function setupEventListeners() {
-            document.getElementById('weekly-schedule-body').addEventListener('click', handleGridClick);
-            const dialog = document.getElementById('patient-select-dialog');
-            const confirmBtn = document.getElementById('dialog-confirm-btn');
-            const cancelBtn = document.getElementById('dialog-cancel-btn');
-            const patientSearchInput = document.getElementById('patient-search');
-            const freqFilter = document.getElementById('freq-filter');
-            const diseaseFilter = document.getElementById('disease-filter');
-            const patientListContainer = document.getElementById('patient-list-container');
-            const dialogTabs = document.querySelector('.dialog-tabs');
-            patientSearchInput.addEventListener('input', renderPatientListInDialog);
-            freqFilter.addEventListener('change', renderPatientListInDialog);
-            diseaseFilter.addEventListener('change', renderPatientListInDialog);
-            dialogTabs.addEventListener('click', e => { if (e.target.matches('.dialog-tab-btn')) { dialogTabs.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); dialogState.currentTab = e.target.dataset.type; renderPatientListInDialog(); } });
-            patientListContainer.addEventListener('click', e => { const item = e.target.closest('.patient-list-item'); if (item) { const previouslySelected = patientListContainer.querySelector('.selected'); if (previouslySelected) { previouslySelected.classList.remove('selected'); } item.classList.add('selected'); dialogState.selectedPatientId = item.dataset.patientId; confirmBtn.disabled = false; } });
-            confirmBtn.addEventListener('click', handleAddSchedule);
-            cancelBtn.addEventListener('click', () => dialog.close());
-            document.getElementById('prev-week-btn').addEventListener('click', () => changeWeek(-7));
-            document.getElementById('next-week-btn').addEventListener('click', () => changeWeek(7));
-            document.getElementById('today-week-btn').addEventListener('click', () => { if (hasUnsavedChanges && !confirm('您有未儲存的變更，確定要切換日期嗎？')) return; currentWeekStartDate = getStartOfWeek(new Date()); loadAllData(); });
-            saveBtn.addEventListener('click', saveChangesToCloud);
-            document.getElementById('filter-group').addEventListener('click', (e) => { if (e.target.tagName === 'BUTTON') { document.querySelector('#filter-group .active').classList.remove('active'); e.target.classList.add('active'); inpatientFilter = e.target.dataset.filter; renderInpatientList(); } });
-            setupDragAndDrop();
-        }
-        
-        function setupDragAndDrop() {
-            const inpatientList = document.getElementById('inpatient-list');
-            const scheduleArea = document.querySelector('.schedule-area');
-            let draggedItem = null;
-            inpatientList.addEventListener('dragstart', e => { if (e.target.matches('li[data-patient-id], li[data-patient-id] *')) { const li = e.target.closest('li[data-patient-id]'); if (li) { e.dataTransfer.setData('text/plain', li.dataset.patientId); e.dataTransfer.effectAllowed = 'copy'; } } });
-            scheduleArea.addEventListener('dragover', e => { e.preventDefault(); const slot = e.target.closest('.schedule-slot'); if (slot && !slot.classList.contains('filled')) { document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); slot.classList.add('drag-over'); e.dataTransfer.dropEffect = 'copy'; } });
-            scheduleArea.addEventListener('dragleave', e => { e.target.closest('.schedule-slot')?.classList.remove('drag-over'); });
-            scheduleArea.addEventListener('drop', e => { e.preventDefault(); const slot = e.target.closest('.schedule-slot'); if (slot) { slot.classList.remove('drag-over'); if (slot.classList.contains('filled')) { alert("此床位已有排班，請先清除。"); return; } const patientId = e.dataTransfer.getData('text/plain'); const slotId = slot.dataset.slotId; if (patientId) { handleSlotUpdate(slotId, patientId); } } });
-        }
-
-        function openPatientDialog(slotId) {
-            const dialog = document.getElementById('patient-select-dialog');
-            dialogState.slotId = slotId;
-            dialogState.selectedPatientId = null;
-            dialog.querySelector('#dialog-confirm-btn').disabled = true;
-            dialog.querySelector('#patient-search').value = '';
-            dialog.querySelector('#freq-filter').value = '';
-            dialog.querySelector('#disease-filter').value = '';
-            const [bed, shift, day] = slotId.split('-');
-            dialog.querySelector('#dialog-title').textContent = `為 床號 ${bed} - ${SHIFTS[shift]} (${WEEKDAYS[day]}) 新增排班`;
-            renderPatientListInDialog();
-            dialog.showModal();
-        }
-
-        function renderPatientListInDialog() {
-            const dialog = document.getElementById('patient-select-dialog');
-            const patientListContainer = document.getElementById('patient-list-container');
-            const searchTerm = document.getElementById('patient-search').value.toLowerCase();
-            const selectedFreq = document.getElementById('freq-filter').value;
-            const selectedDisease = document.getElementById('disease-filter').value;
-            const selectedType = dialog.querySelector('.dialog-tab-btn.active').dataset.type;
-            const patientsToShow = allPatients.filter(p => {
-                const matchesType = p.status === selectedType;
-                const matchesSearch = !searchTerm || (p.name && p.name.toLowerCase().includes(searchTerm)) || (p.medicalRecordNumber && p.medicalRecordNumber.includes(searchTerm));
-                const matchesFreq = !selectedFreq || p.frequency === selectedFreq;
-                const matchesDisease = !selectedDisease || (p.diseases && p.diseases.includes(selectedDisease));
-                return matchesType && matchesSearch && matchesFreq && matchesDisease;
-            });
-            if (patientsToShow.length === 0) {
-                patientListContainer.innerHTML = `<div style="padding: 20px; text-align:center; color: #888;">無符合條件的病人</div>`;
-                return;
             }
-            patientListContainer.innerHTML = patientsToShow.map(p => `
-                <div class="patient-list-item" data-patient-id="${p.id}">
-                    <div class="patient-main-info">
-                        <span class="patient-name">${p.name}</span>
-                        <span class="patient-mrn">(${p.medicalRecordNumber || 'N/A'})</span>
-                    </div>
-                    <div class="patient-meta">
-                        ${(p.diseases || []).map(d => `<span class="disease-tag-small">${d}</span>`).join(' ')}
-                        <span>${p.frequency || '未設定'}</span>
-                    </div>
-                </div>
-            `).join('');
-        }
-        
-        const handleAddSchedule = () => { 
-            const patientId = dialogState.selectedPatientId;
-            if (!patientId) return;
-            const slotId = dialogState.slotId;
-            const patient = allPatients.find(p => p.id === patientId); 
-            const fillType = document.querySelector('input[name="fill-type"]:checked').value; 
-            const freq = patient.frequency; 
-            const [bed, shiftIndex, dayIndex] = slotId.split('-'); 
-            const daysToFill = (fillType === 'frequency' && freq && FREQ_MAP_TO_DAY_INDEX[freq]) ? FREQ_MAP_TO_DAY_INDEX[freq] : [parseInt(dayIndex)]; 
-            daysToFill.forEach(d_idx => { 
-                const newSlotId = `${bed}-${shiftIndex}-${d_idx}`; 
-                handleSlotUpdate(newSlotId, patientId);
-            }); 
-            document.getElementById('add-schedule-dialog').close(); 
-        };
-        
-        function handleGridClick(e) {
-            const slot = e.target.closest('.schedule-slot');
-            if (!slot) return;
-            const slotId = slot.dataset.slotId;
-            if (slot.classList.contains('filled')) {
-                if (confirm('確定要清除此床位的排班嗎？')) {
-                    handleSlotUpdate(slotId, null);
-                }
-            } else {
-                openAddScheduleDialog(slotId);
-            }
-        }
-
-        function handleSlotUpdate(slotId, patientId) {
-            const [bed, shiftIndex, dayIndex] = slotId.split('-');
-            const dateStr = formatDate(new Date(new Date(currentWeekStartDate).setDate(currentWeekStartDate.getDate() + parseInt(dayIndex))));
-            let dailyRecord = weekScheduleRecords.get(dateStr);
-
-            if (!dailyRecord) {
-                dailyRecord = { date: dateStr, schedule: {}, names: {} };
-                weekScheduleRecords.set(dateStr, dailyRecord);
-            }
-            if (!dailyRecord.schedule) dailyRecord.schedule = {};
-
-            const shiftName = SHIFTS[shiftIndex];
-            const dailyShiftId = `bed-${bed}-${shiftName}`;
             
-            if (patientId) {
-                dailyRecord.schedule[dailyShiftId] = { patientId: patientId, shiftId: dailyShiftId };
-            } else {
-                delete dailyRecord.schedule[dailyShiftId];
+            function populateScheduleData() {
+                const patientMap = new Map(allPatients.map(p => [p.id, p]));
+                document.querySelectorAll('.schedule-slot').forEach(slot => {
+                    const slotId = slot.dataset.slotId;
+                    const [bed, shiftIndex, dayIndex] = slotId.split('-');
+                    const d = new Date(currentWeekStartDate);
+                    d.setDate(d.getDate() + parseInt(dayIndex));
+                    const dateStr = formatDateForQuery(d);
+                    
+                    const dailyRecord = weekScheduleRecords.get(dateStr);
+                    const dailyShiftId = `bed-${bed}-${SHIFTS[shiftIndex]}`;
+                    const scheduleData = dailyRecord?.schedule?.[dailyShiftId];
+                    
+                    slot.innerHTML = '';
+                    slot.className = 'schedule-slot';
+
+                    if (scheduleData?.patientId) {
+                        const patient = patientMap.get(scheduleData.patientId);
+                        if (patient) {
+                            slot.classList.add('filled', `status-${patient.status || 'opd'}`);
+                            slot.innerHTML = `<div class="slot-patient-name">${patient.name}</div><div class="slot-patient-mode">${patient.mode || ''}</div>`;
+                        }
+                    }
+                });
             }
-            setChange();
-            updateDisplay();
+            
+            function renderInpatientList() {
+                const inpatientList = document.getElementById('inpatient-list');
+                let inpatients = allPatients.filter(p => p.status === 'ipd');
+                const filterGroup = document.getElementById('filter-group');
+                const inpatientFilter = filterGroup.querySelector('.active').dataset.filter;
+                const regularFreqs = ['一三五', '二四六'];
+                if (inpatientFilter === '135') { inpatients = inpatients.filter(p => p.frequency === '一三五');
+                } else if (inpatientFilter === '246') { inpatients = inpatients.filter(p => p.frequency === '二四六');
+                } else if (inpatientFilter === 'other') { inpatients = inpatients.filter(p => !regularFreqs.includes(p.frequency)); }
+                
+                inpatientList.innerHTML = '';
+                if (inpatients.length === 0) {
+                    inpatientList.innerHTML = '<li>無符合條件的住院病人</li>';
+                } else {
+                    inpatients.forEach(p => {
+                        const li = document.createElement('li');
+                        li.draggable = true;
+                        li.dataset.patientId = p.id;
+                        li.innerHTML = `
+                            <div class="patient-info-row"><span class="name">${p.name}</span><span class="freq">${p.frequency || '未設定'}</span></div>
+                            <div class="patient-info-row"><span class="mrn">(${p.medicalRecordNumber || '無病歷號'})</span></div>`;
+                        inpatientList.appendChild(li);
+                    });
+                }
+            }
+
+            function renderWeeklyScheduleTableFrame() {
+                const head = document.getElementById('weekly-schedule-head');
+                const body = document.getElementById('weekly-schedule-body');
+                let headerHtml = '<tr><th>床位</th><th>班次</th>';
+                WEEKDAYS.forEach((day, dIdx) => { headerHtml += `<th><div class="weekday">${day}</div><div class="date" data-day-index="${dIdx}"></div></th>`; });
+                headerHtml += '</tr>';
+                head.innerHTML = headerHtml;
+                let bodyHtml = '';
+                bedLayout.forEach(bedNumber => {
+                    const isHepatitis = hepatitisBeds.includes(bedNumber);
+                    SHIFTS.forEach((shift, shiftIndex) => {
+                        const rowClass = isHepatitis ? 'hepatitis-bed' : '';
+                        bodyHtml += `<tr class="${rowClass}">`;
+                        if (shiftIndex === 0) bodyHtml += `<td rowspan="3">${bedNumber}號床</td>`;
+                        bodyHtml += `<td>${shift}</td>`;
+                        WEEKDAYS.forEach((day, dayIndex) => {
+                            const slotId = `${bedNumber}-${shiftIndex}-${dayIndex}`;
+                            bodyHtml += `<td data-slot-id-wrapper="${slotId}"><div class="schedule-slot" data-slot-id="${slotId}"></div></td>`;
+                        });
+                        bodyHtml += `</tr>`;
+                    });
+                });
+                body.innerHTML = bodyHtml;
+            }
+            
+            const updateStatsToolbar = () => {
+                const statsToolbar = document.getElementById('stats-toolbar');
+                const dailyCounts = WEEKDAYS.map(() => ({ '早班': 0, '午班': 0, '晚班': 0 }));
+                weekScheduleRecords.forEach(record => {
+                    if(record && record.schedule) {
+                        const d = new Date(record.date + 'T00:00:00');
+                        const dayIndex = d.getDay() === 0 ? 6 : d.getDay() - 1;
+                        if(dayIndex >= 0 && dayIndex < 6) {
+                            Object.values(record.schedule).forEach(slotData => {
+                               if(slotData && slotData.shiftId) {
+                                   const shift = slotData.shiftId.split('-')[2];
+                                   if(shift === '早班') dailyCounts[dayIndex]['早班']++;
+                                   else if(shift === '午班') dailyCounts[dayIndex]['午班']++;
+                                   else if(shift === '晚班') dailyCounts[dayIndex]['晚班']++;
+                               }
+                            });
+                        }
+                    }
+                });
+                statsToolbar.innerHTML = dailyCounts.map((counts, dayIndex) => 
+                    `<div class="stat-item"><strong>${WEEKDAYS[dayIndex].slice(-1)}:</strong><div class="stat-shift-group"><span class="shift-early">早:${counts['早班']}</span><span class="shift-noon">午:${counts['午班']}</span><span class="shift-late">晚:${counts['晚班']}</span></div></div>`
+                ).join('');
+            };
+            
+            function setupEventListeners() {
+                document.getElementById('weekly-schedule-body').addEventListener('click', handleGridClick);
+                const dialog = document.getElementById('patient-select-dialog');
+                const confirmBtn = document.getElementById('dialog-confirm-btn');
+                const cancelBtn = document.getElementById('dialog-cancel-btn');
+                const patientSearchInput = document.getElementById('patient-search');
+                const freqFilter = document.getElementById('freq-filter');
+                const diseaseFilter = document.getElementById('disease-filter');
+                const patientListContainer = document.getElementById('patient-list-container');
+                const dialogTabs = document.querySelector('.dialog-tabs');
+                
+                patientSearchInput.addEventListener('input', renderPatientListInDialog);
+                freqFilter.addEventListener('change', renderPatientListInDialog);
+                diseaseFilter.addEventListener('change', renderPatientListInDialog);
+                dialogTabs.addEventListener('click', e => { if (e.target.matches('.dialog-tab-btn')) { dialogTabs.querySelector('.active').classList.remove('active'); e.target.classList.add('active'); dialogState.currentTab = e.target.dataset.type; renderPatientListInDialog(); } });
+                patientListContainer.addEventListener('click', e => { const item = e.target.closest('.patient-list-item'); if (item) { const previouslySelected = patientListContainer.querySelector('.selected'); if (previouslySelected) { previouslySelected.classList.remove('selected'); } item.classList.add('selected'); dialogState.selectedPatientId = item.dataset.patientId; confirmBtn.disabled = false; } });
+                confirmBtn.addEventListener('click', handleAddSchedule);
+                cancelBtn.addEventListener('click', () => dialog.close());
+                
+                document.getElementById('prev-week-btn').addEventListener('click', () => changeWeek(-7));
+                document.getElementById('next-week-btn').addEventListener('click', () => changeWeek(7));
+                document.getElementById('today-week-btn').addEventListener('click', () => { if (hasUnsavedChanges && !confirm('您有未儲存的變更，確定要切換日期嗎？')) return; currentWeekStartDate = getStartOfWeek(new Date()); loadAllData(); });
+                saveBtn.addEventListener('click', saveChangesToCloud);
+                document.getElementById('filter-group').addEventListener('click', (e) => { if (e.target.tagName === 'BUTTON') { document.querySelector('#filter-group .active').classList.remove('active'); e.target.classList.add('active'); inpatientFilter = e.target.dataset.filter; renderInpatientList(); } });
+                setupDragAndDrop();
+            }
+            
+            function setupDragAndDrop() {
+                const inpatientList = document.getElementById('inpatient-list');
+                const scheduleArea = document.querySelector('.schedule-area');
+                inpatientList.addEventListener('dragstart', e => { if (e.target.matches('li[data-patient-id], li[data-patient-id] *')) { const li = e.target.closest('li[data-patient-id]'); if (li) { e.dataTransfer.setData('text/plain', li.dataset.patientId); e.dataTransfer.effectAllowed = 'copy'; } } });
+                scheduleArea.addEventListener('dragover', e => { e.preventDefault(); const slot = e.target.closest('.schedule-slot'); if (slot && !slot.classList.contains('filled')) { document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); slot.classList.add('drag-over'); e.dataTransfer.dropEffect = 'copy'; } });
+                scheduleArea.addEventListener('dragleave', e => { e.target.closest('.schedule-slot')?.classList.remove('drag-over'); });
+                scheduleArea.addEventListener('drop', e => { e.preventDefault(); const slot = e.target.closest('.schedule-slot'); if (slot) { slot.classList.remove('drag-over'); if (slot.classList.contains('filled')) { alert("此床位已有排班，請先清除。"); return; } const patientId = e.dataTransfer.getData('text/plain'); const slotId = slot.dataset.slotId; if (patientId) { handleSlotUpdate(slotId, patientId); } } });
+            }
+
+            function openPatientDialog(slotId) {
+                const dialog = document.getElementById('patient-select-dialog');
+                dialogState.slotId = slotId;
+                dialogState.selectedPatientId = null;
+                dialog.querySelector('#dialog-confirm-btn').disabled = true;
+                dialog.querySelector('#patient-search').value = '';
+                dialog.querySelector('#freq-filter').value = '';
+                dialog.querySelector('#disease-filter').value = '';
+                const [bed, shift, day] = slotId.split('-');
+                dialog.querySelector('#dialog-title').textContent = `為 床號 ${bed} - ${SHIFTS[shift]} (${WEEKDAYS[day]}) 新增排班`;
+                renderPatientListInDialog();
+                dialog.showModal();
+            }
+
+            function renderPatientListInDialog() {
+                const dialog = document.getElementById('patient-select-dialog');
+                const patientListContainer = dialog.querySelector('#patient-list-container');
+                const searchTerm = dialog.querySelector('#patient-search').value.toLowerCase();
+                const selectedFreq = dialog.querySelector('#freq-filter').value;
+                const selectedDisease = dialog.querySelector('#disease-filter').value;
+                const selectedType = dialog.querySelector('.dialog-tab-btn.active').dataset.type;
+                const patientsToShow = allPatients.filter(p => {
+                    const matchesType = p.status === selectedType;
+                    const matchesSearch = !searchTerm || (p.name && p.name.toLowerCase().includes(searchTerm)) || (p.medicalRecordNumber && p.medicalRecordNumber.includes(searchTerm));
+                    const matchesFreq = !selectedFreq || p.frequency === selectedFreq;
+                    const matchesDisease = !selectedDisease || (p.diseases && p.diseases.includes(selectedDisease));
+                    return matchesType && matchesSearch && matchesFreq && matchesDisease;
+                });
+                if (patientsToShow.length === 0) {
+                    patientListContainer.innerHTML = `<div style="padding: 20px; text-align:center; color: #888;">無符合條件的病人</div>`;
+                    return;
+                }
+                patientListContainer.innerHTML = patientsToShow.map(p => `
+                    <div class="patient-list-item" data-patient-id="${p.id}">
+                        <div class="patient-main-info">
+                            <span class="patient-name">${p.name}</span>
+                            <span class="patient-mrn">(${p.medicalRecordNumber || 'N/A'})</span>
+                        </div>
+                        <div class="patient-meta">
+                            ${(p.diseases || []).map(d => `<span class="disease-tag-small">${d}</span>`).join(' ')}
+                            <span>${p.frequency || '未設定'}</span>
+                        </div>
+                    </div>
+                `).join('');
+            }
+            
+            const handleAddSchedule = () => { 
+                const patientId = dialogState.selectedPatientId;
+                if (!patientId) return;
+                const slotId = dialogState.slotId;
+                const patient = allPatients.find(p => p.id === patientId); 
+                const fillType = document.querySelector('input[name="fill-type"]:checked').value; 
+                const freq = patient.frequency; 
+                const [bed, shiftIndex, dayIndex] = slotId.split('-'); 
+                const daysToFill = (fillType === 'frequency' && freq && FREQ_MAP_TO_DAY_INDEX[freq]) ? FREQ_MAP_TO_DAY_INDEX[freq] : [parseInt(dayIndex)]; 
+                daysToFill.forEach(d_idx => { 
+                    const newSlotId = `${bed}-${shiftIndex}-${d_idx}`; 
+                    handleSlotUpdate(newSlotId, patientId);
+                }); 
+                patientSelectDialog.close(); 
+            };
+            
+            function handleGridClick(e) {
+                const slot = e.target.closest('.schedule-slot');
+                if (!slot) return;
+                const slotId = slot.dataset.slotId;
+                if (slot.classList.contains('filled')) {
+                    if (confirm('確定要清除此床位的排班嗎？')) {
+                        handleSlotUpdate(slotId, null);
+                    }
+                } else {
+                    openPatientDialog(slotId);
+                }
+            }
+
+            function handleSlotUpdate(slotId, patientId) {
+                const [bed, shiftIndex, dayIndex] = slotId.split('-');
+                const d = new Date(currentWeekStartDate);
+                d.setDate(d.getDate() + parseInt(dayIndex));
+                const dateStr = formatDateForQuery(d);
+                let dailyRecord = weekScheduleRecords.get(dateStr);
+
+                if (!dailyRecord) {
+                    dailyRecord = { id: null, date: dateStr, schedule: {}, names: {} };
+                    weekScheduleRecords.set(dateStr, dailyRecord);
+                }
+                if (!dailyRecord.schedule) dailyRecord.schedule = {};
+
+                const shiftName = SHIFTS[shiftIndex];
+                const dailyShiftId = `bed-${bed}-${shiftName}`;
+                
+                if (patientId) {
+                    dailyRecord.schedule[dailyShiftId] = { patientId: patientId, shiftId: dailyShiftId };
+                } else {
+                    delete dailyRecord.schedule[dailyShiftId];
+                }
+                setChange();
+                updateDisplay();
+            }
+
+            async function saveChangesToCloud() {
+                saveBtn.disabled = true;
+                statusText.textContent = '儲存中...';
+                try {
+                    const promises = [];
+                    for (const [date, record] of weekScheduleRecords.entries()) {
+                        if (record.id) { // Record exists, update it
+                            if (Object.keys(record.schedule).length > 0) {
+                                promises.push(schedulesApi.update(record.id, record));
+                            } else { // No schedule left, delete the record
+                                promises.push(schedulesApi.delete(record.id));
+                            }
+                        } else { // New record, save it
+                            if (Object.keys(record.schedule).length > 0) {
+                                promises.push(schedulesApi.save(record));
+                            }
+                        }
+                    }
+                    await Promise.all(promises);
+                    hasUnsavedChanges = false;
+                    statusText.textContent = '變更已儲存！';
+                    saveBtn.disabled = true;
+                    alert('週排班已成功儲存！');
+                    await loadAllData(); // Reload to get new IDs
+                } catch (error) {
+                    console.error("儲存失敗:", error);
+                    statusText.textContent = '儲存失敗';
+                    alert(`儲存失敗: ${error.message}`);
+                    saveBtn.disabled = false;
+                }
+            }
+
+            function showMemoReminders(memos) {
+                if (!memos || memos.length === 0) return;
+                const weekStart = new Date(currentWeekStartDate);
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekStart.getDate() + 5);
+                let weeklyAlerts = [];
+                memos.forEach(memo => { if (memo.targetDate) { const memoDate = new Date(memo.targetDate + "T00:00:00"); if (memoDate >= weekStart && memoDate <= weekEnd) { weeklyAlerts.push(`- ${memo.targetDate} (${WEEKDAYS[memoDate.getDay()-1]}): ${memo.content}`); } } });
+                if (weeklyAlerts.length > 0) { setTimeout(() => alert("【本週特別事項提醒】\n\n" + weeklyAlerts.join("\n")), 500); }
+                const patientMemos = memos.filter(m => m.patientName);
+                if (patientMemos.length === 0) return;
+                document.querySelectorAll('.schedule-slot.filled').forEach(slot => { const patientName = slot.querySelector('.slot-patient-name')?.textContent; if (patientName) { const relatedMemos = patientMemos.filter(m => m.patientName === patientName); if (relatedMemos.length > 0) { slot.classList.add('has-memo'); slot.title = relatedMemos.map(m => `備忘: ${m.content}`).join('\n'); } } });
+            }
+            
+            function changeWeek(days) {
+                if (hasUnsavedChanges && !confirm('您有未儲存的變更，確定要切換日期嗎？所有變更將會遺失。')) return;
+                const newDate = new Date(currentWeekStartDate);
+                newDate.setDate(newDate.getDate() + days);
+                currentWeekStartDate = newDate;
+                loadAllData();
+            }
+            
+            function updateSaveButtonState() {
+                saveBtn.disabled = !hasUnsavedChanges;
+            }
+
+            initialize();
         }
 
-        function showMemoReminders(memos) {
-            if (!memos || memos.length === 0) return;
-            const weekStart = new Date(currentWeekStartDate);
-            const weekEnd = new Date(weekStart);
-            weekEnd.setDate(weekStart.getDate() + 5);
-            let weeklyAlerts = [];
-            memos.forEach(memo => { if (memo.targetDate) { const memoDate = new Date(memo.targetDate + "T00:00:00"); if (memoDate >= weekStart && memoDate <= weekEnd) { weeklyAlerts.push(`- ${memo.targetDate} (${WEEKDAYS[memoDate.getDay()-1]}): ${memo.content}`); } } });
-            if (weeklyAlerts.length > 0) { setTimeout(() => alert("【本週特別事項提醒】\n\n" + weeklyAlerts.join("\n")), 500); }
-            const patientMemos = memos.filter(m => m.patientName);
-            if (patientMemos.length === 0) return;
-            document.querySelectorAll('.schedule-slot.filled').forEach(slot => { const patientName = slot.querySelector('.slot-patient-name')?.textContent; if (patientName) { const relatedMemos = patientMemos.filter(m => m.patientName === patientName); if (relatedMemos.length > 0) { slot.classList.add('has-memo'); slot.title = relatedMemos.map(m => `備忘: ${m.content}`).join('\n'); } } });
-        }
-        
-        function changeWeek(days) {
-            if (hasUnsavedChanges && !confirm('您有未儲存的變更，確定要切換日期嗎？所有變更將會遺失。')) return;
-            const newDate = new Date(currentWeekStartDate);
-            newDate.setDate(newDate.getDate() + days);
-            currentWeekStartDate = newDate;
-            loadAllData();
-        }
-        
-        function updateSaveButtonState() {
-            saveBtn.disabled = !hasUnsavedChanges;
+        function waitForFirebase(callback) {
+            if (window.parent && window.parent.db && window.parent.firebase) {
+                window.db = window.parent.db;
+                window.firebase = window.parent.firebase;
+                callback();
+            } else {
+                console.log(location.pathname.split('/').pop() + " is waiting for Firebase...");
+                setTimeout(() => waitForFirebase(callback), 100);
+            }
         }
 
-        initialize();
+        waitForFirebase(initializeWeeklyViewPage);
     });
     </script>
 </body>
