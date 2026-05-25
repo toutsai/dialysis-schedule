@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CVVH 即時監控面板</title>
+    <style>
+        :root {
+            --bg: #f4f6f8; --card: #ffffff; --ink: #2c3e50; --muted: #7f8c9a;
+            --line: #e3e8ee; --accent: #1abc9c; --accent-dark: #16a085;
+            --blue: #005a9c; --ok: #2e7d32; --warn: #ef6c00; --danger: #c62828;
+            --ok-bg: #e8f5e9; --warn-bg: #fff3e0; --danger-bg: #fdecea;
+        }
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif; background: var(--bg); margin: 0; padding: 20px; color: var(--ink); }
+        .container { max-width: 1400px; margin: 0 auto; }
+
+        /* Header / 病人綁定列 */
+        .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; background: var(--card); padding: 16px 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); margin-bottom: 20px; }
+        .topbar h1 { font-size: 1.3em; margin: 0; white-space: nowrap; }
+        .topbar h1 .sub { font-size: 0.6em; color: var(--muted); font-weight: normal; margin-left: 8px; }
+        .bind-group { display: flex; align-items: center; gap: 8px; flex: 1 1 320px; }
+        .bind-group label { font-weight: bold; white-space: nowrap; }
+        .bind-group select, .bind-group input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 1em; min-width: 200px; }
+        .icon-btn { padding: 8px 12px; border: 1px solid var(--line); background: #fff; border-radius: 6px; cursor: pointer; font-size: 0.95em; }
+        .icon-btn:hover { background: #f0f3f6; }
+
+        .conn { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+        .conn .dot { width: 12px; height: 12px; border-radius: 50%; background: #bbb; }
+        .conn.live .dot { background: var(--ok); box-shadow: 0 0 0 4px rgba(46,125,50,0.18); animation: pulse 1.4s infinite; }
+        .conn.paused .dot { background: var(--warn); }
+        @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(46,125,50,0.35);} 70%{box-shadow:0 0 0 8px rgba(46,125,50,0);} 100%{box-shadow:0 0 0 0 rgba(46,125,50,0);} }
+        .btn-primary { padding: 9px 16px; border: none; border-radius: 6px; background: var(--accent); color: #fff; font-size: 0.95em; cursor: pointer; font-weight: bold; }
+        .btn-primary:hover { background: var(--accent-dark); }
+        .btn-primary:disabled { background: #c7cdd3; cursor: not-allowed; }
+
+        .layout { display: grid; grid-template-columns: 380px 1fr; gap: 20px; align-items: start; }
+        @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+
+        .card { background: var(--card); border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); padding: 18px 20px; }
+        .card h2 { font-size: 1.05em; margin: 0 0 14px; padding-bottom: 10px; border-bottom: 2px solid var(--line); display: flex; align-items: center; gap: 8px; }
+        .card h2 .badge { font-size: 0.7em; font-weight: normal; color: var(--muted); margin-left: auto; }
+
+        /* 設定值 */
+        .settings-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+        .setting { display: grid; grid-template-columns: 1fr 110px 44px; align-items: center; gap: 8px; }
+        .setting label { font-size: 0.92em; }
+        .setting label small { display: block; color: var(--muted); font-size: 0.82em; }
+        .setting input { padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; text-align: right; font-size: 1em; width: 100%; }
+        .setting input:focus { outline: none; border-color: var(--accent); }
+        .setting .unit { color: var(--muted); font-size: 0.85em; }
+
+        /* 即時數據 tiles */
+        .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+        @media (max-width: 560px) { .tiles { grid-template-columns: 1fr; } }
+        .tile { border: 1px solid var(--line); border-left: 6px solid var(--muted); border-radius: 10px; padding: 14px 16px; transition: border-color .3s, background .3s; }
+        .tile.ok { border-left-color: var(--ok); }
+        .tile.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+        .tile.danger { border-left-color: var(--danger); background: var(--danger-bg); }
+        .tile-head { display: flex; align-items: baseline; justify-content: space-between; }
+        .tile-name { font-size: 0.95em; color: var(--muted); }
+        .tile-status { font-size: 0.75em; font-weight: bold; padding: 2px 8px; border-radius: 10px; }
+        .tile.ok .tile-status { color: var(--ok); background: var(--ok-bg); }
+        .tile.warn .tile-status { color: var(--warn); }
+        .tile.danger .tile-status { color: var(--danger); }
+        .tile-value { font-size: 2.4em; font-weight: bold; line-height: 1.1; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
+        .tile-value .u { font-size: 0.38em; font-weight: normal; color: var(--muted); margin-left: 4px; }
+        .tile canvas { width: 100%; height: 40px; display: block; margin-top: 6px; }
+
+        .hint { color: var(--muted); font-size: 0.85em; margin-top: 14px; line-height: 1.6; }
+        .empty { text-align: center; color: var(--muted); padding: 40px 20px; }
+        .chart-card { margin-top: 20px; }
+        .chart-card canvas { width: 100%; height: 220px; display: block; }
+        .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 0.85em; margin-top: 10px; }
+        .legend span { display: inline-flex; align-items: center; gap: 6px; }
+        .legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="topbar">
+        <h1>CVVH 即時監控<span class="sub">Continuous Veno-Venous Hemofiltration</span></h1>
+        <div class="bind-group">
+            <label for="patient-select">綁定病人</label>
+            <select id="patient-select"><option value="">讀取中…</option></select>
+            <input type="text" id="patient-manual" placeholder="或手動輸入姓名" style="display:none;">
+            <button class="icon-btn" id="refresh-btn" title="重新讀取病人清單">⟳</button>
+        </div>
+        <div class="conn paused" id="conn">
+            <span class="dot"></span><span id="conn-text">未連線</span>
+        </div>
+        <button class="btn-primary" id="toggle-btn" disabled>開始接收資料</button>
+    </div>
+
+    <div id="main" style="display:none;">
+        <div class="layout">
+            <!-- 設定值 -->
+            <div class="card">
+                <h2>設定值<span class="badge" id="settings-saved"></span></h2>
+                <div class="settings-grid" id="settings-grid"></div>
+                <p class="hint">設定值會依綁定病人自動儲存於本機。FF 由 BF、Hct 與各流速即時計算。</p>
+            </div>
+
+            <!-- 即時數據 -->
+            <div class="card">
+                <h2>即時數據<span class="badge" id="last-update">—</span></h2>
+                <div class="tiles" id="tiles"></div>
+            </div>
+        </div>
+
+        <!-- 趨勢圖 -->
+        <div class="card chart-card">
+            <h2>壓力趨勢（最近 2 分鐘）</h2>
+            <canvas id="trend"></canvas>
+            <div class="legend">
+                <span><i style="background:#c0392b"></i>TMP (mmHg)</span>
+                <span><i style="background:#2980b9"></i>靜脈壓 (mmHg)</span>
+                <span><i style="background:#16a085"></i>FF (%)</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="empty" class="empty">請先在上方選擇要綁定的病人。</div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+    const API_BASE_URL = 'https://684eb206f0c9c9848d28d637.mockapi.io/patients';
+
+    // ---- 設定值定義（單位、預設、合理範圍）-------------------------------
+    const SETTING_DEFS = [
+        { key: 'bf',           name: '血流量 (BF)',        sub: 'Blood Flow',       unit: 'mL/min', def: 150 },
+        { key: 'ufRate',       name: '淨脫水速率 (UF)',    sub: 'Fluid Removal',    unit: 'mL/h',   def: 100 },
+        { key: 'preDilution',  name: '前稀釋',             sub: 'Pre-dilution',     unit: 'mL/h',   def: 1000 },
+        { key: 'postDilution', name: '後稀釋',             sub: 'Post-dilution',    unit: 'mL/h',   def: 500 },
+        { key: 'pbp',          name: 'PBP',               sub: 'Pre-Blood Pump',   unit: 'mL/h',   def: 200 },
+        { key: 'dialysate',    name: '透析液流速',         sub: 'Dialysate Flow',   unit: 'mL/h',   def: 0 },
+        { key: 'replacement',  name: '置換液流速',         sub: 'Replacement Flow', unit: 'mL/h',   def: 1500 },
+        { key: 'heparin',      name: '肝素幫浦',           sub: 'Heparin Pump',     unit: 'mL/h',   def: 5 },
+        { key: 'hct',          name: '血比容 (Hct)',       sub: 'Hematocrit',       unit: '%',      def: 30 },
+    ];
+
+    // ---- 即時數據定義 + 警示門檻 -----------------------------------------
+    const LIVE_DEFS = {
+        ff:       { name: '過濾分率 (FF)', unit: '%',    decimals: 1, thresholds: { warn: 25, danger: 30 } },
+        tmp:      { name: '跨膜壓 (TMP)',  unit: 'mmHg', decimals: 0, thresholds: { warn: 150, danger: 250 } },
+        venous:   { name: '靜脈壓',        unit: 'mmHg', decimals: 0, thresholds: { warn: 200, danger: 250 } },
+        effluent: { name: '累積廢液量',    unit: 'mL',   decimals: 0, thresholds: null },
+    };
+
+    // ---- 狀態 -------------------------------------------------------------
+    let boundId = null, boundName = null;
+    let settings = {};
+    let source = null;                 // 目前的資料來源（可抽換）
+    let history = [];                  // 趨勢資料 {t, tmp, venous, ff}
+    const MAX_HISTORY = 120;           // 約 2 分鐘 @ 1s
+
+    // ---- DOM --------------------------------------------------------------
+    const el = (id) => document.getElementById(id);
+    const patientSelect = el('patient-select');
+    const patientManual = el('patient-manual');
+    const toggleBtn = el('toggle-btn');
+    const conn = el('conn');
+    const connText = el('conn-text');
+
+    // ===================================================================
+    //  資料來源層：之後接真機只要替換這個類別（WebSocket / 輪詢）即可。
+    //  介面約定：start(onData)、stop()。onData 收到 {tmp, venous, ff, effluent}
+    // ===================================================================
+    class SimulatedDataSource {
+        constructor(getSettings) {
+            this.getSettings = getSettings;
+            this.timer = null;
+            this.effluent = 0;          // 累積廢液 (mL)
+            this.tmpDrift = 0;          // 模擬濾器逐漸阻塞
+        }
+        start(onData) {
+            const tick = () => {
+                const s = this.getSettings();
+                const ff = computeFF(s);
+                // 每秒累積廢液：effluent rate (mL/h) / 3600
+                const effRate = (+s.pbp||0) + (+s.replacement||0) + (+s.dialysate||0) + (+s.ufRate||0);
+                this.effluent += effRate / 3600;
+                // 濾器隨 FF 升高而緩慢阻塞 → TMP 緩升
+                this.tmpDrift += Math.max(0, (ff - 20)) * 0.02;
+                const noise = (a) => (Math.random() - 0.5) * a;
+                const tmp = Math.max(0, 50 + ff * 1.8 + this.tmpDrift + noise(12));
+                const venous = Math.max(0, 70 + (+s.bf||0) * 0.35 + noise(18));
+                onData({ tmp, venous, ff, effluent: this.effluent });
+            };
+            tick();
+            this.timer = setInterval(tick, 1000);
+        }
+        stop() { if (this.timer) { clearInterval(this.timer); this.timer = null; } }
+    }
+
+    // FF 計算（CVVH 常用近似式，可依機器調整）
+    // 血漿流量 Qp = BF(mL/min) × 60 × (1 − Hct) ；前稀釋會稀釋進入濾器的血液
+    // FF = 對流移除量 / (血漿流量 + 前置稀釋) × 100%
+    function computeFF(s) {
+        const bf = +s.bf || 0, hct = +s.hct || 0;
+        const plasmaFlow = bf * 60 * (1 - hct / 100);
+        const preFlow = (+s.pbp || 0) + (+s.preDilution || 0);
+        const convective = (+s.replacement || 0) + (+s.postDilution || 0) + (+s.ufRate || 0);
+        const denom = plasmaFlow + preFlow;
+        if (denom <= 0) return 0;
+        return Math.min(100, (convective / denom) * 100);
+    }
+
+    // ---- 病人清單 ---------------------------------------------------------
+    async function loadPatients() {
+        patientSelect.innerHTML = '<option value="">讀取中…</option>';
+        try {
+            const res = await fetch(API_BASE_URL);
+            if (!res.ok) throw new Error('network');
+            const list = (await res.json()).filter(p => !p.isDeleted && p.status !== 'deleted');
+            list.sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh-Hant'));
+            patientSelect.innerHTML = '<option value="">— 請選擇病人 —</option>' +
+                list.map(p => `<option value="${p.id}">${p.name || '(未命名)'}${p.medicalRecordNumber ? ' / ' + p.medicalRecordNumber : ''}${p.mode ? ' · ' + p.mode : ''}</option>`).join('');
+            patientManual.style.display = 'none';
+        } catch (e) {
+            // 網路不可用：改為手動輸入姓名綁定
+            patientSelect.innerHTML = '<option value="">（無法連線病人清單）</option>';
+            patientManual.style.display = '';
+        }
+    }
+
+    // ---- 設定值 UI + 儲存 -------------------------------------------------
+    function settingsStorageKey(id) { return 'cvvh_settings_' + id; }
+
+    function loadSettings(id) {
+        let saved = {};
+        try { saved = JSON.parse(localStorage.getItem(settingsStorageKey(id)) || '{}'); } catch (e) {}
+        settings = {};
+        SETTING_DEFS.forEach(d => { settings[d.key] = (saved[d.key] !== undefined) ? saved[d.key] : d.def; });
+    }
+
+    function saveSettings() {
+        if (!boundId) return;
+        try { localStorage.setItem(settingsStorageKey(boundId), JSON.stringify(settings)); } catch (e) {}
+        const badge = el('settings-saved');
+        badge.textContent = '已儲存 ' + new Date().toLocaleTimeString();
+        clearTimeout(saveSettings._t);
+        saveSettings._t = setTimeout(() => badge.textContent = '', 2000);
+    }
+
+    function renderSettings() {
+        el('settings-grid').innerHTML = SETTING_DEFS.map(d => `
+            <div class="setting">
+                <label>${d.name}<small>${d.sub}</small></label>
+                <input type="number" step="any" id="set-${d.key}" value="${settings[d.key]}">
+                <span class="unit">${d.unit}</span>
+            </div>`).join('');
+        SETTING_DEFS.forEach(d => {
+            el('set-' + d.key).addEventListener('input', (e) => {
+                const v = e.target.value;
+                settings[d.key] = v === '' ? '' : Number(v);
+                saveSettings();
+                if (!source) updateFFTileFromSettings();  // 未串流時也即時更新 FF
+            });
+        });
+    }
+
+    // ---- 即時數據 tiles ---------------------------------------------------
+    const sparkData = { ff: [], tmp: [], venous: [], effluent: [] };
+
+    function renderTiles() {
+        el('tiles').innerHTML = Object.entries(LIVE_DEFS).map(([k, d]) => `
+            <div class="tile" id="tile-${k}">
+                <div class="tile-head">
+                    <span class="tile-name">${d.name}</span>
+                    <span class="tile-status" id="status-${k}">—</span>
+                </div>
+                <div class="tile-value"><span id="val-${k}">--</span><span class="u">${d.unit}</span></div>
+                <canvas id="spark-${k}" width="300" height="40"></canvas>
+            </div>`).join('');
+    }
+
+    function classify(key, value) {
+        const t = LIVE_DEFS[key].thresholds;
+        if (!t) return 'ok';
+        if (value >= t.danger) return 'danger';
+        if (value >= t.warn) return 'warn';
+        return 'ok';
+    }
+
+    const STATUS_TEXT = { ok: '正常', warn: '注意', danger: '警示' };
+
+    function updateTile(key, value) {
+        const d = LIVE_DEFS[key];
+        el('val-' + key).textContent = Number(value).toFixed(d.decimals);
+        const cls = classify(key, value);
+        const tile = el('tile-' + key);
+        tile.classList.remove('ok', 'warn', 'danger');
+        tile.classList.add(cls);
+        el('status-' + key).textContent = d.thresholds ? STATUS_TEXT[cls] : '累積';
+        sparkData[key].push(value);
+        if (sparkData[key].length > 60) sparkData[key].shift();
+        drawSpark(key);
+    }
+
+    function updateFFTileFromSettings() {
+        if (!boundId) return;
+        updateTile('ff', computeFF(settings));
+    }
+
+    // ---- 繪圖 -------------------------------------------------------------
+    function drawSpark(key) {
+        const c = el('spark-' + key); if (!c) return;
+        fitCanvas(c);
+        const ctx = c.getContext('2d');
+        const w = c.clientWidth, h = c.clientHeight;
+        ctx.clearRect(0, 0, w, h);
+        const data = sparkData[key]; if (data.length < 2) return;
+        const min = Math.min(...data), max = Math.max(...data), range = (max - min) || 1;
+        const colors = { ff: '#16a085', tmp: '#c0392b', venous: '#2980b9', effluent: '#8e44ad' };
+        ctx.beginPath();
+        data.forEach((v, i) => {
+            const x = (i / (data.length - 1)) * w;
+            const y = h - 4 - ((v - min) / range) * (h - 8);
+            i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        });
+        ctx.strokeStyle = colors[key]; ctx.lineWidth = 2; ctx.stroke();
+    }
+
+    function fitCanvas(c) {
+        const dpr = window.devicePixelRatio || 1;
+        const w = c.clientWidth, h = c.clientHeight;
+        if (c.width !== w * dpr || c.height !== h * dpr) {
+            c.width = w * dpr; c.height = h * dpr;
+            c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+    }
+
+    function drawTrend() {
+        const c = el('trend'); if (!c) return;
+        fitCanvas(c);
+        const ctx = c.getContext('2d');
+        const w = c.clientWidth, h = c.clientHeight;
+        ctx.clearRect(0, 0, w, h);
+        // 格線
+        ctx.strokeStyle = '#eef1f4'; ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) { const y = (h / 4) * i; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+        if (history.length < 2) return;
+        const series = [
+            { key: 'tmp', color: '#c0392b', max: 300 },
+            { key: 'venous', color: '#2980b9', max: 300 },
+            { key: 'ff', color: '#16a085', max: 50 },
+        ];
+        series.forEach(s => {
+            ctx.beginPath();
+            history.forEach((pt, i) => {
+                const x = (i / (history.length - 1)) * w;
+                const y = h - (Math.min(pt[s.key], s.max) / s.max) * (h - 6) - 3;
+                i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+            });
+            ctx.strokeStyle = s.color; ctx.lineWidth = 2; ctx.stroke();
+        });
+    }
+
+    // ---- 串流控制 ---------------------------------------------------------
+    function onData(d) {
+        updateTile('ff', d.ff);
+        updateTile('tmp', d.tmp);
+        updateTile('venous', d.venous);
+        updateTile('effluent', d.effluent);
+        history.push({ t: Date.now(), tmp: d.tmp, venous: d.venous, ff: d.ff });
+        if (history.length > MAX_HISTORY) history.shift();
+        drawTrend();
+        el('last-update').textContent = '更新 ' + new Date().toLocaleTimeString();
+    }
+
+    function startStream() {
+        if (!boundId) return;
+        source = new SimulatedDataSource(() => settings);
+        source.start(onData);
+        conn.classList.remove('paused'); conn.classList.add('live');
+        connText.textContent = '接收中（模擬）';
+        toggleBtn.textContent = '暫停';
+    }
+
+    function stopStream() {
+        if (source) { source.stop(); source = null; }
+        conn.classList.remove('live'); conn.classList.add('paused');
+        connText.textContent = '已暫停';
+        toggleBtn.textContent = '開始接收資料';
+    }
+
+    // ---- 綁定病人 ---------------------------------------------------------
+    function bindPatient(id, name) {
+        stopStream();
+        boundId = id; boundName = name;
+        history = [];
+        Object.keys(sparkData).forEach(k => sparkData[k] = []);
+        loadSettings(id);
+        renderSettings();
+        renderTiles();
+        updateFFTileFromSettings();
+        el('empty').style.display = 'none';
+        el('main').style.display = '';
+        toggleBtn.disabled = false;
+        connText.textContent = '已綁定：' + name;
+        startStream();   // 綁定後自動開始接收
+    }
+
+    function unbind() {
+        stopStream();
+        boundId = null; boundName = null;
+        el('main').style.display = 'none';
+        el('empty').style.display = '';
+        toggleBtn.disabled = true;
+        connText.textContent = '未連線';
+    }
+
+    // ---- 事件 -------------------------------------------------------------
+    patientSelect.addEventListener('change', (e) => {
+        const id = e.target.value;
+        if (!id) { unbind(); return; }
+        const name = e.target.options[e.target.selectedIndex].text.split(' / ')[0].split(' · ')[0];
+        bindPatient(id, name);
+    });
+    patientManual.addEventListener('change', (e) => {
+        const name = e.target.value.trim();
+        if (!name) { unbind(); return; }
+        bindPatient('manual:' + name, name);
+    });
+    el('refresh-btn').addEventListener('click', loadPatients);
+    toggleBtn.addEventListener('click', () => { source ? stopStream() : startStream(); });
+    window.addEventListener('resize', () => { drawTrend(); Object.keys(sparkData).forEach(drawSpark); });
+
+    loadPatients();
+})();
+</script>
+</body>
+</html>
