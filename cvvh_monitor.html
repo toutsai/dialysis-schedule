@@ -208,6 +208,19 @@
         return Math.min(100, (convective / denom) * 100);
     }
 
+    // ---- 隱私遮罩（永遠遮罩，不提供解遮）---------------------------------
+    function maskName(name) {
+        const s = String(name || '').trim();
+        if (s.length <= 1) return s;
+        if (s.length === 2) return s[0] + 'O';
+        return s[0] + 'O'.repeat(s.length - 2) + s[s.length - 1];   // 王小明 → 王O明
+    }
+    function maskMRN(mrn) {
+        const s = String(mrn || '').trim();
+        if (s.length <= 4) return s;
+        return '＊'.repeat(s.length - 4) + s.slice(-4);              // 12345678 → ＊＊＊＊5678
+    }
+
     // ---- 病人清單 ---------------------------------------------------------
     async function loadPatients() {
         patientSelect.innerHTML = '<option value="">讀取中…</option>';
@@ -217,7 +230,7 @@
             const list = (await res.json()).filter(p => !p.isDeleted && p.status !== 'deleted');
             list.sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh-Hant'));
             patientSelect.innerHTML = '<option value="">— 請選擇病人 —</option>' +
-                list.map(p => `<option value="${p.id}">${p.name || '(未命名)'}${p.medicalRecordNumber ? ' / ' + p.medicalRecordNumber : ''}${p.mode ? ' · ' + p.mode : ''}</option>`).join('');
+                list.map(p => `<option value="${p.id}">${maskName(p.name) || '(未命名)'}${p.medicalRecordNumber ? ' / ' + maskMRN(p.medicalRecordNumber) : ''}${p.mode ? ' · ' + p.mode : ''}</option>`).join('');
             patientManual.style.display = 'none';
         } catch (e) {
             // 網路不可用：改為手動輸入姓名綁定
@@ -423,7 +436,7 @@
     patientManual.addEventListener('change', (e) => {
         const name = e.target.value.trim();
         if (!name) { unbind(); return; }
-        bindPatient('manual:' + name, name);
+        bindPatient('manual:' + name, maskName(name));
     });
     el('refresh-btn').addEventListener('click', loadPatients);
     toggleBtn.addEventListener('click', () => { source ? stopStream() : startStream(); });
